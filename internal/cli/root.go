@@ -51,12 +51,20 @@ func NewRootCmd(app *App) *cobra.Command {
 		Short:   "A human-friendly CLI for macOS Keychain",
 		Long:    "kc replaces the macOS security command with an intuitive CLI for managing secrets stored in the native Keychain.",
 		Version: Version,
-		// No RunE on root — prints help by default.
+		RunE: func(cmd *cobra.Command, args []string) error {
+			interactive, _ := cmd.Flags().GetBool("interactive")
+			initialFilter, _ := cmd.Flags().GetString("vault")
+			if interactive || len(args) == 0 {
+				return launchInteractive(app, initialFilter)
+			}
+			return cmd.Help()
+		},
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
 
 	root.PersistentFlags().String("vault", "", "target vault (overrides active vault)")
+	root.Flags().BoolP("interactive", "i", false, "launch interactive TUI")
 
 	root.AddCommand(
 		newGetCmd(app),
