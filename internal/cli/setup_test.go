@@ -62,8 +62,8 @@ func TestRenderMigratedContentCommentsLinesAndAppendsSnippetOnce(t *testing.T) {
 	if !strings.Contains(updated, "#kc-migrated# export API_KEY=sk-test-123") {
 		t.Fatalf("updated = %q, want commented secret line", updated)
 	}
-	if !strings.Contains(updated, "# BEGIN kc") || !strings.Contains(updated, "eval \"$(kc env)\"") {
-		t.Fatalf("updated = %q, want kc init block", updated)
+	if !strings.Contains(updated, "# BEGIN kc") || !strings.Contains(updated, "eval \"$(kc env)\"") || !strings.Contains(updated, "kc completion zsh") {
+		t.Fatalf("updated = %q, want kc init block with env and completion", updated)
 	}
 
 	again := renderMigratedContent(updated, secrets, initSnippet(shellZsh))
@@ -78,13 +78,37 @@ func TestRenderMigratedContentCommentsLinesAndAppendsSnippetOnce(t *testing.T) {
 func TestInitSnippetForSupportedShells(t *testing.T) {
 	t.Parallel()
 
-	if got := initSnippet(shellZsh); got != "eval \"$(kc env)\"" {
+	if got := initSnippet(shellZsh); got != "eval \"$(kc env)\"\nsource <(kc completion zsh)" {
 		t.Fatalf("zsh snippet = %q", got)
 	}
-	if got := initSnippet(shellBash); got != "eval \"$(kc env)\"" {
+	if got := initSnippet(shellBash); got != "eval \"$(kc env)\"\nsource <(kc completion bash)" {
 		t.Fatalf("bash snippet = %q", got)
 	}
-	if got := initSnippet(shellFish); got != "kc env | source" {
+	if got := initSnippet(shellFish); got != "kc env | source\nkc completion fish | source" {
 		t.Fatalf("fish snippet = %q", got)
+	}
+}
+
+func TestRenderMigratedContentReplacesExistingKCBlock(t *testing.T) {
+	t.Parallel()
+
+	original := strings.Join([]string{
+		"export PATH=/usr/local/bin:$PATH",
+		kcBeginMarker,
+		"eval \"$(kc env)\"",
+		kcEndMarker,
+		"",
+	}, "\n")
+
+	updated := renderMigratedContent(original, nil, initSnippet(shellZsh))
+
+	if strings.Count(updated, kcBeginMarker) != 1 {
+		t.Fatalf("kc block count = %d, want 1 in %q", strings.Count(updated, kcBeginMarker), updated)
+	}
+	if !strings.Contains(updated, "source <(kc completion zsh)") {
+		t.Fatalf("updated content missing zsh completion source: %q", updated)
+	}
+	if strings.Contains(updated, kcBeginMarker+"\n"+"eval \"$(kc env)\"\n"+kcEndMarker) {
+		t.Fatalf("old kc block should be replaced, got %q", updated)
 	}
 }

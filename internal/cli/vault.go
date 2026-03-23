@@ -74,6 +74,12 @@ func newVaultSwitchCmd(app *App) *cobra.Command {
 		Use:   "switch NAME",
 		Short: "Set the active vault",
 		Args:  cobra.ExactArgs(1),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if len(args) != 0 {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			return completeVaults(app, toComplete)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			if err := app.Vaults.Switch(name); err != nil {

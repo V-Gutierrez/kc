@@ -1,0 +1,27 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-set - Store or update a secret in the keychain
+
+
+.SH SYNOPSIS
+\fBkc set KEY VALUE [flags]\fP
+
+
+.SH DESCRIPTION
+Stores VALUE under KEY in the active vault (or --vault). Creates or overwrites.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for set
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--vault\fP=""
+	target vault (overrides active vault)
+
+
+.SH SEE ALSO
+\fBkc(1)\fP

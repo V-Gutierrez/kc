@@ -886,3 +886,134 @@ func TestMigrate_MissingFromFlag(t *testing.T) {
 		t.Fatal("expected error when --from flag is missing")
 	}
 }
+
+func TestGetCompletesKeys(t *testing.T) {
+	app, store, _, _ := newTestApp()
+	store.Set("default", "API_KEY", "s1")
+	store.Set("default", "DB_PASS", "s2")
+
+	stdout, _, err := executeCmd(app, "__complete", "get", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, "API_KEY") {
+		t.Errorf("completion missing API_KEY: %q", stdout)
+	}
+	if !strings.Contains(stdout, "DB_PASS") {
+		t.Errorf("completion missing DB_PASS: %q", stdout)
+	}
+	if !strings.Contains(stdout, ":4") {
+		t.Errorf("expected NoFileComp directive (:4) in output: %q", stdout)
+	}
+}
+
+func TestDelCompletesKeys(t *testing.T) {
+	app, store, _, _ := newTestApp()
+	store.Set("default", "OLD_KEY", "v1")
+	store.Set("default", "OTHER_KEY", "v2")
+
+	stdout, _, err := executeCmd(app, "__complete", "del", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, "OLD_KEY") {
+		t.Errorf("completion missing OLD_KEY: %q", stdout)
+	}
+	if !strings.Contains(stdout, "OTHER_KEY") {
+		t.Errorf("completion missing OTHER_KEY: %q", stdout)
+	}
+	if !strings.Contains(stdout, ":4") {
+		t.Errorf("expected NoFileComp directive (:4) in output: %q", stdout)
+	}
+}
+
+func TestGetCompletesKeysWithVaultFlag(t *testing.T) {
+	app, store, vaults, _ := newTestApp()
+	vaults.Create("staging")
+	store.Set("staging", "STAGE_KEY", "sv1")
+
+	stdout, _, err := executeCmd(app, "__complete", "get", "--vault", "staging", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, "STAGE_KEY") {
+		t.Errorf("completion missing STAGE_KEY: %q", stdout)
+	}
+}
+
+func TestGetCompletionFiltersByPrefix(t *testing.T) {
+	app, store, _, _ := newTestApp()
+	store.Set("default", "API_KEY", "s1")
+	store.Set("default", "DB_PASS", "s2")
+
+	stdout, _, err := executeCmd(app, "__complete", "get", "A")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, "API_KEY") {
+		t.Fatalf("completion missing API_KEY: %q", stdout)
+	}
+	if strings.Contains(stdout, "DB_PASS") {
+		t.Fatalf("completion should filter out DB_PASS for prefix A: %q", stdout)
+	}
+}
+
+func TestVaultFlagCompletionFiltersByPrefix(t *testing.T) {
+	app, _, vaults, _ := newTestApp()
+	vaults.Create("prod")
+	vaults.Create("staging")
+
+	stdout, _, err := executeCmd(app, "__complete", "get", "--vault", "st")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, "staging") {
+		t.Fatalf("completion missing staging: %q", stdout)
+	}
+	if strings.Contains(stdout, "default") || strings.Contains(stdout, "prod") {
+		t.Fatalf("vault completion should filter to prefix st: %q", stdout)
+	}
+}
+
+func TestVaultSwitchCompletesVaultNames(t *testing.T) {
+	app, _, vaults, _ := newTestApp()
+	vaults.Create("prod")
+	vaults.Create("staging")
+
+	stdout, _, err := executeCmd(app, "__complete", "vault", "switch", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, "prod") {
+		t.Errorf("completion missing prod: %q", stdout)
+	}
+	if !strings.Contains(stdout, "staging") {
+		t.Errorf("completion missing staging: %q", stdout)
+	}
+	if !strings.Contains(stdout, ":4") {
+		t.Errorf("expected NoFileComp directive (:4) in output: %q", stdout)
+	}
+}
+
+func TestVaultFlagCompletesVaultNames(t *testing.T) {
+	app, _, vaults, _ := newTestApp()
+	vaults.Create("prod")
+	vaults.Create("staging")
+
+	stdout, _, err := executeCmd(app, "__complete", "get", "--vault", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, "default") {
+		t.Errorf("completion missing default: %q", stdout)
+	}
+	if !strings.Contains(stdout, "prod") {
+		t.Errorf("completion missing prod: %q", stdout)
+	}
+	if !strings.Contains(stdout, "staging") {
+		t.Errorf("completion missing staging: %q", stdout)
+	}
+	if !strings.Contains(stdout, ":4") {
+		t.Errorf("expected NoFileComp directive (:4) in output: %q", stdout)
+	}
+}

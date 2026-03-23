@@ -30,9 +30,9 @@ func TestInitOutputsShellSnippet(t *testing.T) {
 		shell string
 		want  string
 	}{
-		{name: "zsh", shell: "zsh", want: "eval \"$(kc env)\"\n"},
-		{name: "bash", shell: "bash", want: "eval \"$(kc env)\"\n"},
-		{name: "fish", shell: "fish", want: "kc env | source\n"},
+		{name: "zsh", shell: "zsh", want: "eval \"$(kc env)\"\nsource <(kc completion zsh)\n"},
+		{name: "bash", shell: "bash", want: "eval \"$(kc env)\"\nsource <(kc completion bash)\n"},
+		{name: "fish", shell: "fish", want: "kc env | source\nkc completion fish | source\n"},
 	}
 
 	for _, tt := range tests {
@@ -112,7 +112,10 @@ func TestSetupMigratesZshSecretsAndInjectsSnippet(t *testing.T) {
 		t.Fatalf("updated rc missing migrated AWS_SECRET_ACCESS_KEY line: %q", updated)
 	}
 	if !strings.Contains(updated, "eval \"$(kc env)\"") {
-		t.Fatalf("updated rc missing init snippet: %q", updated)
+		t.Fatalf("updated rc missing env snippet: %q", updated)
+	}
+	if !strings.Contains(updated, "source <(kc completion zsh)") {
+		t.Fatalf("updated rc missing completion snippet: %q", updated)
 	}
 
 	backup, err := os.ReadFile(rcPath + ".bak")
@@ -188,8 +191,8 @@ func TestSetupFishWritesConfDFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected fish conf.d file: %v", err)
 	}
-	if string(data) != "kc env | source\n" {
-		t.Fatalf("conf.d file = %q, want fish source snippet", string(data))
+	if string(data) != "kc env | source\nkc completion fish | source\n" {
+		t.Fatalf("conf.d file = %q, want fish source snippet with completion", string(data))
 	}
 }
 
@@ -222,6 +225,9 @@ func TestSetupWithoutSecretsStillInstallsInitSnippet(t *testing.T) {
 		t.Fatalf("updated rc missing original content: %q", updated)
 	}
 	if !strings.Contains(updated, "eval \"$(kc env)\"") {
-		t.Fatalf("updated rc missing init snippet: %q", updated)
+		t.Fatalf("updated rc missing env snippet: %q", updated)
+	}
+	if !strings.Contains(updated, "source <(kc completion zsh)") {
+		t.Fatalf("updated rc missing completion snippet: %q", updated)
 	}
 }

@@ -1,0 +1,27 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-get - Read a secret from the keychain
+
+
+.SH SYNOPSIS
+\fBkc get KEY [flags]\fP
+
+
+.SH DESCRIPTION
+Retrieves the value for KEY from the active vault (or --vault) and copies it to the clipboard.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for get
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--vault\fP=""
+	target vault (overrides active vault)
+
+
+.SH SEE ALSO
+\fBkc(1)\fP

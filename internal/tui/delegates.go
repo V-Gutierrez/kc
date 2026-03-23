@@ -24,6 +24,9 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 	}
 
 	titleStyle := d.styles.normal
+	if index%2 == 1 && index != m.Index() {
+		titleStyle = titleStyle.Faint(true)
+	}
 	if index == m.Index() {
 		titleStyle = d.styles.selected
 	}
@@ -31,5 +34,9 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 	masked := d.styles.masked.Render(maskedValue(item, d.model.preview))
 	line1 := titleStyle.Render(item.Key)
 	line2 := d.styles.vault.Render(item.Vault) + "  " + masked
-	fmt.Fprint(w, line1+"\n"+line2)
+	row := line1 + "\n" + line2
+	if index%2 == 1 && index != m.Index() {
+		row = d.styles.rowAlt.Render(row)
+	}
+	fmt.Fprint(w, row)
 }

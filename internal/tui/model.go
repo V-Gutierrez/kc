@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -98,6 +99,11 @@ type deletedMsg struct {
 	entry entry
 }
 
+type hideMsg struct {
+	entry entry
+	token int
+}
+
 type errMsg struct{ err error }
 
 type Model struct {
@@ -118,6 +124,7 @@ type Model struct {
 	err           error
 	width         int
 	height        int
+	revealToken   int
 	delegate      itemDelegate
 }
 
@@ -162,7 +169,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.list.SetSize(max(20, msg.Width/2), max(10, msg.Height-6))
+		m.list.SetSize(max(20, msg.Width/2), max(10, msg.Height-8))
 		return m, nil
 	case loadedMsg:
 		m.loading = false
@@ -180,22 +187,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyFilters()
 		return m, nil
 	case revealedMsg:
+		m.revealToken++
 		m.preview = previewState{vault: msg.entry.Vault, key: msg.entry.Key, value: msg.value, revealed: true}
 		m.status = fmt.Sprintf("Revealed %s from %s", msg.entry.Key, msg.entry.Vault)
+		return m, tea.Tick(10*time.Second, func(_ time.Time) tea.Msg {
+			return hideMsg{entry: msg.entry, token: m.revealToken}
+		})
+	case hideMsg:
+		if m.preview.revealed && msg.token == m.revealToken && m.preview.vault == msg.entry.Vault && m.preview.key == msg.entry.Key {
+			m.clearPreview()
+			m.status = "Value hidden"
+		}
 		return m, nil
 	case copiedMsg:
 		m.status = fmt.Sprintf("Copied %s from %s", msg.entry.Key, msg.entry.Vault)
 		return m, nil
 	case savedMsg:
 		m.upsertEntry(msg.entry)
-		m.preview = previewState{}
+		m.clearPreview()
 		m.mode = modeBrowse
 		m.status = fmt.Sprintf("Saved %s in %s", msg.entry.Key, msg.entry.Vault)
 		m.applyFilters()
 		return m, nil
 	case deletedMsg:
 		m.removeEntry(msg.entry)
-		m.preview = previewState{}
+		m.clearPreview()
 		m.mode = modeBrowse
 		m.status = fmt.Sprintf("Deleted %s from %s", msg.entry.Key, msg.entry.Vault)
 		m.applyFilters()
@@ -235,7 +251,16 @@ func (m Model) View() string {
 		lipgloss.NewStyle().PaddingLeft(2).Width(max(30, m.width/2-4)).Render(right),
 	)
 
-	return m.styles.app.Render(body)
+	statusBar := m.statusView()
+	return m.styles.app.Render(lipgloss.JoinVertical(lipgloss.Left, body, "\n", statusBar))
+}
+
+func (m Model) statusView() string {
+	status := m.status
+	if status == "" {
+		status = "Ready"
+	}
+	return m.styles.status.Render(status)
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -286,7 +311,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
-		m.preview = previewState{}
+		m.clearPreview()
 		return m, copyCmd(m.deps, selected)
 	case key.Matches(msg, m.keys.Confirm):
 		selected, ok := m.selectedEntry()
@@ -300,13 +325,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Top):
 		if len(m.list.Items()) > 0 {
 			m.list.Select(0)
-			m.preview = previewState{}
+			m.clearPreview()
 		}
 		return m, nil
 	case key.Matches(msg, m.keys.Bottom):
 		if len(m.list.Items()) > 0 {
 			m.list.Select(len(m.list.Items()) - 1)
-			m.preview = previewState{}
+			m.clearPreview()
 		}
 		return m, nil
 	}
@@ -315,7 +340,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	previous := m.list.Index()
 	m.list, cmd = m.list.Update(msg)
 	if previous != m.list.Index() {
-		m.preview = previewState{}
+		m.clearPreview()
 	}
 	return m, cmd
 }
@@ -328,7 +353,7 @@ func (m Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	m.search, cmd = m.search.Update(msg)
-	m.preview = previewState{}
+	m.clearPreview()
 	m.applyFilters()
 	return m, cmd
 }
@@ -336,7 +361,7 @@ func (m Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if key.Matches(msg, m.keys.Cancel) {
 		m.mode = modeBrowse
-		m.preview = previewState{}
+		m.clearPreview()
 		return m, nil
 	}
 	if key.Matches(msg, m.keys.Confirm) {
@@ -446,8 +471,13 @@ func (m *Model) cycleVaultFilter() {
 		}
 	}
 	m.currentFilter = m.vaults[(idx+1)%len(m.vaults)]
-	m.preview = previewState{}
+	m.clearPreview()
 	m.applyFilters()
+}
+
+func (m *Model) clearPreview() {
+	m.preview = previewState{}
+	m.revealToken++
 }
 
 func (m *Model) upsertEntry(item entry) {
@@ -626,9 +656,10 @@ func (m Model) headerView() string {
 	if filter == "" {
 		filter = allVaultsLabel
 	}
+	count := len(m.list.Items())
 	return lipgloss.JoinVertical(lipgloss.Left,
 		m.styles.header.Render("kc interactive"),
-		m.styles.subtle.Render("Vault filter: "+filter+" • Active vault: "+m.activeVault),
+		m.styles.subtle.Render(fmt.Sprintf("Vault filter: %s • Active vault: %s • (%d items)", filter, m.activeVault, count)),
 	)
 }
 
@@ -636,7 +667,12 @@ func (m Model) searchView() string {
 	if m.mode != modeSearch && m.search.Value() == "" {
 		return m.styles.subtle.Render("Press / to search across visible keys")
 	}
-	return m.search.View()
+	count := len(m.list.Items())
+	suffix := " match"
+	if count != 1 {
+		suffix += "es"
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Left, m.search.View(), m.styles.subtle.Render(fmt.Sprintf(" (%d%s)", count, suffix)))
 }
 
 func (m Model) previewView() string {
@@ -650,9 +686,6 @@ func (m Model) previewView() string {
 		)
 	} else {
 		lines = append(lines, m.styles.subtle.Render("No key selected"))
-	}
-	if m.status != "" {
-		lines = append(lines, "", m.styles.status.Render(m.status))
 	}
 	if m.err != nil {
 		lines = append(lines, "", m.styles.error.Render(m.err.Error()))

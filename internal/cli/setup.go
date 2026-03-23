@@ -147,9 +147,9 @@ func normalizeShell(shell string) (string, error) {
 
 func initSnippet(shell string) string {
 	if shell == shellFish {
-		return "kc env | source"
+		return "kc env | source\nkc completion fish | source"
 	}
-	return "eval \"$(kc env)\""
+	return "eval \"$(kc env)\"\nsource <(kc completion " + shell + ")"
 }
 
 func primaryRCPath(shell string) (string, error) {
@@ -290,7 +290,10 @@ func renderMigratedContent(original string, secrets []detectedSecret, snippet st
 		}
 	}
 	updated := strings.Join(lines, "\n")
-	if strings.Contains(updated, kcBeginMarker) || strings.Contains(updated, snippet) {
+	if replaced, ok := replaceManagedBlock(updated, snippet); ok {
+		return replaced
+	}
+	if strings.Contains(updated, snippet) {
 		return updated
 	}
 	if updated != "" && !strings.HasSuffix(updated, "\n") {
@@ -301,6 +304,21 @@ func renderMigratedContent(original string, secrets []detectedSecret, snippet st
 	}
 	updated += kcBeginMarker + "\n" + snippet + "\n" + kcEndMarker + "\n"
 	return updated
+}
+
+func replaceManagedBlock(content, snippet string) (string, bool) {
+	begin := strings.Index(content, kcBeginMarker)
+	if begin == -1 {
+		return "", false
+	}
+	endStart := strings.Index(content[begin:], kcEndMarker)
+	if endStart == -1 {
+		return "", false
+	}
+	endStart += begin
+	end := endStart + len(kcEndMarker)
+	replacement := kcBeginMarker + "\n" + snippet + "\n" + kcEndMarker
+	return content[:begin] + replacement + content[end:], true
 }
 
 func writeBackupAndReplace(path string, original, updated []byte) error {
