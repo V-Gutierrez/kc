@@ -1,0 +1,61 @@
+version: 2
+
+project_name: kc
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: kc
+    main: ./cmd/kc
+    binary: kc
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/v-gutierrez/kc/internal/cli.Version={{.Version}}
+
+archives:
+  - id: kc
+    ids:
+      - kc
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: "checksums.txt"
+
+brews:
+  - name: kc
+    ids:
+      - kc
+    repository:
+      owner: v-gutierrez
+      name: kc
+      branch: main
+    directory: HomebrewFormula
+    homepage: https://github.com/v-gutierrez/kc
+    description: Human-friendly macOS Keychain CLI
+    license: MIT
+    commit_author:
+      name: github-actions[bot]
+      email: 41898282+github-actions[bot]@users.noreply.github.com
+    install: |
+      bin.install "kc"
+    test: |
+      system "#{bin}/kc", "--version"
+
+release:
+  github:
+    owner: v-gutierrez
+    name: kc

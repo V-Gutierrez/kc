@@ -71,6 +71,8 @@ func NewRootCmd(app *App) *cobra.Command {
 		newSetCmd(app),
 		newDelCmd(app),
 		newListCmd(app),
+		newInitCmd(app),
+		newSetupCmd(app),
 		newVaultCmd(app),
 		newImportCmd(app),
 		newExportCmd(app),

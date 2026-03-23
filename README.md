@@ -17,6 +17,10 @@
   <a href="#shell-integration">Shell Integration</a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/v-gutierrez/kc/actions/workflows/ci.yml"><img src="https://github.com/v-gutierrez/kc/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+</p>
+
 ---
 
 ## Why
@@ -30,7 +34,7 @@ Your secrets never leave the Secure Enclave. Zero external dependencies. Zero ne
 ## Install
 
 ```bash
-brew tap v-gutierrez/kc
+brew tap v-gutierrez/kc https://github.com/v-gutierrez/kc
 brew install kc
 ```
 
@@ -61,6 +65,12 @@ kc import .env
 # Load all secrets into your shell
 eval "$(kc env)"
 
+# Print the shell snippet for your shell config
+kc init zsh
+
+# Migrate plaintext secrets from your shell rc file
+kc setup
+
 # Interactive TUI
 kc
 ```
@@ -77,6 +87,8 @@ kc
 | `kc export` | Export active vault as .env to stdout |
 | `kc export -o <file>` | Export to file |
 | `kc env` | Print `export` statements for shell integration |
+| `kc init <shell>` | Print the shell init snippet for zsh, bash, or fish |
+| `kc setup` | Migrate plaintext shell secrets into Keychain and install shell init |
 | `kc migrate --from <service>` | Migrate existing Keychain entries to kc format |
 | `kc vault list` | List all vaults |
 | `kc vault create <name>` | Create a new vault |
@@ -96,13 +108,37 @@ kc get DB_PASS --vault staging    # read from specific vault
 
 ## Shell Integration
 
-Add to your `~/.zshrc`:
+Generate the right shell snippet:
+
+```bash
+kc init zsh
+kc init bash
+kc init fish
+```
+
+For zsh or bash, add to your shell rc file:
 
 ```bash
 eval "$(kc env)"
 ```
 
+For fish:
+
+```fish
+kc env | source
+```
+
 That's it. All secrets from your active vault are loaded as environment variables on shell startup.
+
+### One-command onboarding
+
+If you already have plaintext secrets in `~/.zshrc`, `~/.bash_profile`, or fish config, run:
+
+```bash
+kc setup
+```
+
+`kc setup` detects your shell, shows the secrets it found, imports them into your active vault, comments the old lines with `#kc-migrated#`, and installs the correct init snippet.
 
 ### Per-vault loading
 
