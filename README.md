@@ -10,13 +10,15 @@
 </p>
 
 <p align="center">
+  <a href="#why">Why</a> •
+  <a href="#how-it-works">How It Works</a> •
   <a href="#install">Install</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#commands">Commands</a> •
+  <a href="#touch-id">Touch ID</a> •
   <a href="#vaults">Vaults</a> •
   <a href="#shell-integration">Shell Integration</a> •
-  <a href="#touch-id">Touch ID</a> •
-  <a href="#search">Search</a>
+  <a href="#security">Security</a>
 </p>
 
 <p align="center">
@@ -35,24 +37,24 @@
 
 ## Why
 
-Every developer on macOS has API keys in `.env` files, `.zshrc`, or `.bashrc` — **plaintext, git-committable, screenshot-visible.**
+```bash
+# Before
+export OPENAI_API_KEY="sk-proj-abc123"  # in your .zshrc, visible to everything
 
-The native Keychain is the right solution, but the `security` command UX is hostile. **kc** fixes that.
+# After
+kc set OPENAI_API_KEY    # AES-256 in Secure Enclave, Touch ID to access
+```
 
-Your secrets never leave the Secure Enclave. Zero external dependencies. Zero network calls. Ever.
+kc doesn't add security macOS doesn't already have. It makes the secure path the easy path.
 
-## What's New in v0.4.0
+## How It Works
 
-- 🔐 **Touch ID boot-session grace period** — the first successful unlock is cached until logout or restart
-- 📦 **Protected exports** — `kc export` now follows the same protected-read policy as other read commands
-- 🔍 **`kc search`** — fuzzy search across all vaults
-- 📊 **`kc diff`** — compare secrets across vaults
-- 📝 **`kc list --json`** — JSON output for scripting
+kc is a Go wrapper around macOS `security` CLI. No custom cryptography. No network calls. No config files. Your secrets stay in Apple's encryption stack.
 
 ## Install
 
 ```bash
-brew tap v-gutierrez/kc https://github.com/v-gutierrez/kc
+brew tap v-gutierrez/kc
 brew install kc
 ```
 
@@ -71,24 +73,14 @@ sudo mv kc /usr/local/bin/
 # Interactive TUI (recommended for secret entry)
 kc
 
-# One-shot commands are still available,
-# but your shell may record CLI arguments in history.
-kc set API_KEY "sk-proj-abc123"
-
-# Store without Touch ID protection
-kc set API_KEY "sk-proj-abc123" --no-protect
+# Store a secret without putting the value in shell history
+kc set OPENAI_API_KEY
 
 # Read it (copies to clipboard, auto-clears in 30s)
-kc get API_KEY
+kc get OPENAI_API_KEY
 
 # Search across all vaults
 kc search openai
-
-# List all keys (values masked)
-kc list
-
-# List as JSON (for scripting)
-kc list --json
 
 # Import from .env file
 kc import .env
@@ -98,9 +90,6 @@ eval "$(kc env)"
 
 # Compare vaults
 kc diff prod staging
-
-# Search across all vaults
-kc search openai
 ```
 
 ## Commands
@@ -153,18 +142,6 @@ kc export > .env
 - If Touch ID is unavailable, falls back to system password prompt
 - Zero friction in daily workflow — one fingerprint per boot session
 
-## Search
-
-Find secrets across all vaults instantly:
-
-```bash
-# Fuzzy search
-kc search api
-
-# Search with JSON output
-kc search openai --json
-```
-
 ## Vaults
 
 Vaults are logical groups for your secrets. Under the hood, they map to Keychain "service" fields prefixed with `kc:`.
@@ -175,6 +152,18 @@ kc vault create staging
 kc vault switch prod
 kc set DB_PASS "super-secret"     # saved in vault "prod"
 kc get DB_PASS --vault staging    # read from specific vault
+```
+
+### Search
+
+Find secrets across all vaults instantly:
+
+```bash
+# Fuzzy search
+kc search api
+
+# Search with JSON output
+kc search openai --json
 ```
 
 ## Shell Integration
