@@ -3,6 +3,8 @@ package keychain
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -319,11 +321,76 @@ func TestExtractQuotedValue(t *testing.T) {
 		{`    "acct"<blob>="MY_KEY"`, "MY_KEY"},
 		{`    "svce"<blob>="kc:default"`, "kc:default"},
 		{`    "acct"<blob>=<NULL>`, ""},
+		{`    "acct"<blob>`, ""},
 	}
 	for _, tt := range tests {
 		got := extractQuotedValue(tt.line)
 		if got != tt.want {
 			t.Errorf("extractQuotedValue(%q) = %q, want %q", tt.line, got, tt.want)
 		}
+	}
+}
+
+func TestListMetadata_DumpFails(t *testing.T) {
+	runner := &fakeRunner{results: []fakeResult{{Output: []byte("boom"), Err: errors.New("exit status 1")}}}
+	kc := &Keychain{Runner: runner}
+
+	_, err := kc.ListMetadata("kc:default")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestSet_Failure(t *testing.T) {
+	runner := &fakeRunner{results: []fakeResult{{Output: []byte("denied"), Err: errors.New("exit status 1")}}}
+	kc := &Keychain{Runner: runner}
+
+	err := kc.Set("kc:default", "API_KEY", "new-value")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestProtectAll_ProtectsUnprotectedItems(t *testing.T) {
+	dumpOutput, err := os.ReadFile(filepath.Join("testdata", "dump-keychain-sample.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	runner := &fakeRunner{results: []fakeResult{
+		{Output: dumpOutput, Err: nil},
+		{Output: []byte("legacy-secret\n"), Err: nil},
+		{Output: nil, Err: nil},
+	}}
+	kc := &Keychain{Runner: runner}
+
+	count, err := kc.ProtectAll("kc:default")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("count = %d, want 1", count)
+	}
+	if len(runner.calls) != 3 {
+		t.Fatalf("calls = %d, want 3", len(runner.calls))
+	}
+	if runner.calls[1].Args[0] != "find-generic-password" {
+		t.Fatalf("second call = %v, want get", runner.calls[1].Args)
+	}
+	if runner.calls[2].Args[0] != "add-generic-password" {
+		t.Fatalf("third call = %v, want set", runner.calls[2].Args)
+	}
+}
+
+func TestParseMetadataNullCommentIsUnprotected(t *testing.T) {
+	dumpOutput, err := os.ReadFile(filepath.Join("testdata", "dump-keychain-sample.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	items := parseMetadata(string(dumpOutput), "kc:default")
+	if len(items) != 2 {
+		t.Fatalf("items = %#v, want 2 entries", items)
+	}
+	if items[1].Protected {
+		t.Fatalf("second item = %#v, want unprotected", items[1])
 	}
 }

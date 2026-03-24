@@ -10,6 +10,8 @@ import (
 	touchid "github.com/noamcohen97/touchid-go"
 )
 
+var touchIDAuthenticate = touchid.Authenticate
+
 type TouchIDAuthorizer struct{}
 
 func NewTouchIDAuthorizer() Authorizer {
@@ -23,7 +25,7 @@ func (TouchIDAuthorizer) Authorize(reason string) error {
 	if reason == "" {
 		reason = "Unlock kc secret"
 	}
-	if err := touchid.Authenticate(ctx, touchid.PolicyDeviceOwnerAuthentication, reason); err != nil {
+	if err := touchIDAuthenticate(ctx, touchid.PolicyDeviceOwnerAuthentication, reason); err != nil {
 		return fmt.Errorf("authentication failed: %w", err)
 	}
 	return nil

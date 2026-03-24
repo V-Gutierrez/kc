@@ -228,7 +228,9 @@ func (m *mockBulkStore) ReadRawService(service string) (map[string]string, error
 
 func TestGetSuccess(t *testing.T) {
 	app, store, _, clip := newTestApp()
-	store.Set("default", "API_KEY", "secret123")
+	if err := store.Set("default", "API_KEY", "secret123"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, stderr, err := executeCmd(app, "get", "API_KEY")
 	if err != nil {
@@ -259,8 +261,12 @@ func TestGetNotFound(t *testing.T) {
 
 func TestGetWithVaultFlag(t *testing.T) {
 	app, store, vaults, _ := newTestApp()
-	vaults.Create("staging")
-	store.Set("staging", "DB_PASS", "pg123")
+	if err := vaults.Create("staging"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("staging", "DB_PASS", "pg123"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "get", "DB_PASS", "--vault", "staging")
 	if err != nil {
@@ -298,7 +304,9 @@ func TestSetSuccess(t *testing.T) {
 
 func TestSetWithVaultFlag(t *testing.T) {
 	app, store, vaults, _ := newTestApp()
-	vaults.Create("prod")
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
 
 	_, _, err := executeCmd(app, "set", "KEY", "val", "--vault", "prod")
 	if err != nil {
@@ -337,7 +345,9 @@ func TestSetMissingArgs(t *testing.T) {
 
 func TestDelSuccess(t *testing.T) {
 	app, store, _, _ := newTestApp()
-	store.Set("default", "OLD_KEY", "oldval")
+	if err := store.Set("default", "OLD_KEY", "oldval"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "del", "OLD_KEY")
 	if err != nil {
@@ -363,7 +373,9 @@ func TestDelNotFound(t *testing.T) {
 
 func TestDelAlias(t *testing.T) {
 	app, store, _, _ := newTestApp()
-	store.Set("default", "X", "y")
+	if err := store.Set("default", "X", "y"); err != nil {
+		t.Fatal(err)
+	}
 
 	_, _, err := executeCmd(app, "rm", "X")
 	if err != nil {
@@ -373,8 +385,12 @@ func TestDelAlias(t *testing.T) {
 
 func TestListSuccess(t *testing.T) {
 	app, store, _, _ := newTestApp()
-	store.Set("default", "A", "1")
-	store.Set("default", "B", "2")
+	if err := store.Set("default", "A", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("default", "B", "2"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "list")
 	if err != nil {
@@ -399,8 +415,12 @@ func TestListEmpty(t *testing.T) {
 
 func TestListWithVault(t *testing.T) {
 	app, store, vaults, _ := newTestApp()
-	vaults.Create("staging")
-	store.Set("staging", "DB_HOST", "localhost")
+	if err := vaults.Create("staging"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("staging", "DB_HOST", "localhost"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "list", "--vault", "staging")
 	if err != nil {
@@ -461,7 +481,9 @@ func TestVaultCreateDuplicate(t *testing.T) {
 
 func TestVaultSwitch(t *testing.T) {
 	app, _, vaults, _ := newTestApp()
-	vaults.Create("prod")
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "vault", "switch", "prod")
 	if err != nil {
@@ -485,9 +507,15 @@ func TestVaultSwitchNonexistent(t *testing.T) {
 
 func TestActiveVaultFallback(t *testing.T) {
 	app, store, vaults, _ := newTestApp()
-	vaults.Create("staging")
-	vaults.Switch("staging")
-	store.Set("staging", "MYKEY", "myval")
+	if err := vaults.Create("staging"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vaults.Switch("staging"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("staging", "MYKEY", "myval"); err != nil {
+		t.Fatal(err)
+	}
 
 	// No --vault flag → uses active vault (staging).
 	stdout, _, err := executeCmd(app, "get", "MYKEY")
@@ -505,7 +533,9 @@ func TestDefaultVaultFallback(t *testing.T) {
 	vaults := &mockVaultManager{vaults: []string{"default"}, active: ""}
 	app := &cli.App{Store: store, Vaults: vaults, Clipboard: nil}
 
-	store.Set("default", "X", "y")
+	if err := store.Set("default", "X", "y"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "get", "X")
 	if err != nil {
@@ -521,7 +551,9 @@ func TestGetWithNilClipboard(t *testing.T) {
 	vaults := &mockVaultManager{vaults: []string{"default"}, active: "default"}
 	app := &cli.App{Store: store, Vaults: vaults, Clipboard: nil}
 
-	store.Set("default", "K", "V")
+	if err := store.Set("default", "K", "V"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, stderr, err := executeCmd(app, "get", "K")
 	if err != nil {
@@ -537,7 +569,9 @@ func TestGetWithNilClipboard(t *testing.T) {
 
 func TestGetEmptyValueMask(t *testing.T) {
 	app, store, _, _ := newTestApp()
-	store.Set("default", "EMPTY", "")
+	if err := store.Set("default", "EMPTY", ""); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "get", "EMPTY")
 	if err != nil {
@@ -621,7 +655,9 @@ func TestImportDotEnv_ActiveVault(t *testing.T) {
 
 func TestImportDotEnv_ExplicitVault(t *testing.T) {
 	app, store, _, vaults := newTestAppWithBulk()
-	vaults.Create("prod")
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
 
 	envFile := filepath.Join(t.TempDir(), ".env")
 	if err := os.WriteFile(envFile, []byte("TOKEN=abc\n"), 0o600); err != nil {
@@ -720,7 +756,9 @@ func TestImportDotEnv_StripsInlineComments(t *testing.T) {
 
 func TestImportDotEnv_ExactReportMessage(t *testing.T) {
 	app, _, _, vaults := newTestAppWithBulk()
-	vaults.Create("prod")
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
 
 	envFile := filepath.Join(t.TempDir(), ".env")
 	if err := os.WriteFile(envFile, []byte("TOKEN=abc\n"), 0o600); err != nil {
@@ -739,8 +777,12 @@ func TestImportDotEnv_ExactReportMessage(t *testing.T) {
 
 func TestImportExportImport_RoundTripsApostrophes(t *testing.T) {
 	app, store, _, vaults := newTestAppWithBulk()
-	vaults.Create("prod")
-	store.Set("prod", "AUTHOR", "O'Reilly")
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("prod", "AUTHOR", "O'Reilly"); err != nil {
+		t.Fatal(err)
+	}
 
 	outFile := filepath.Join(t.TempDir(), "roundtrip.env")
 	_, _, err := executeCmd(app, "export", "--vault", "prod", "-o", outFile)
@@ -748,7 +790,9 @@ func TestImportExportImport_RoundTripsApostrophes(t *testing.T) {
 		t.Fatalf("unexpected export error: %v", err)
 	}
 
-	vaults.Create("stage")
+	if err := vaults.Create("stage"); err != nil {
+		t.Fatal(err)
+	}
 	_, _, err = executeCmd(app, "import", outFile, "--vault", "stage")
 	if err != nil {
 		t.Fatalf("unexpected import error: %v", err)
@@ -770,8 +814,12 @@ func TestImportDotEnv_MissingFile(t *testing.T) {
 
 func TestExport_ActiveVault(t *testing.T) {
 	app, store, _, _ := newTestAppWithBulk()
-	store.Set("default", "FOO", "bar")
-	store.Set("default", "BAZ", "qux")
+	if err := store.Set("default", "FOO", "bar"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("default", "BAZ", "qux"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "export")
 	if err != nil {
@@ -787,8 +835,12 @@ func TestExport_ActiveVault(t *testing.T) {
 
 func TestExport_ExplicitVault(t *testing.T) {
 	app, store, _, vaults := newTestAppWithBulk()
-	vaults.Create("prod")
-	store.Set("prod", "SECRET", "s3cr3t")
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("prod", "SECRET", "s3cr3t"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "export", "--vault", "prod")
 	if err != nil {
@@ -801,7 +853,9 @@ func TestExport_ExplicitVault(t *testing.T) {
 
 func TestExport_OutputFile(t *testing.T) {
 	app, store, _, _ := newTestAppWithBulk()
-	store.Set("default", "KEY", "value")
+	if err := store.Set("default", "KEY", "value"); err != nil {
+		t.Fatal(err)
+	}
 
 	outFile := filepath.Join(t.TempDir(), "out.env")
 	_, _, err := executeCmd(app, "export", "-o", outFile)
@@ -820,10 +874,18 @@ func TestExport_OutputFile(t *testing.T) {
 
 func TestExport_QuotesValuesNeedingEnvEscaping(t *testing.T) {
 	app, store, _, _ := newTestAppWithBulk()
-	store.Set("default", "PLAIN", "value")
-	store.Set("default", "SPACED", "two words")
-	store.Set("default", "HASHED", "value # comment")
-	store.Set("default", "APOSTROPHE", "O'Reilly")
+	if err := store.Set("default", "PLAIN", "value"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("default", "SPACED", "two words"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("default", "HASHED", "value # comment"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("default", "APOSTROPHE", "O'Reilly"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "export")
 	if err != nil {
@@ -845,7 +907,9 @@ func TestExport_QuotesValuesNeedingEnvEscaping(t *testing.T) {
 
 func TestEnv_ActiveVault(t *testing.T) {
 	app, store, _, _ := newTestAppWithBulk()
-	store.Set("default", "MY_VAR", "my_val")
+	if err := store.Set("default", "MY_VAR", "my_val"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "env")
 	if err != nil {
@@ -861,8 +925,12 @@ func TestEnv_ActiveVault(t *testing.T) {
 
 func TestEnv_ExplicitVault(t *testing.T) {
 	app, store, _, vaults := newTestAppWithBulk()
-	vaults.Create("staging")
-	store.Set("staging", "HOST", "localhost")
+	if err := vaults.Create("staging"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("staging", "HOST", "localhost"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "env", "--vault", "staging")
 	if err != nil {
@@ -875,7 +943,9 @@ func TestEnv_ExplicitVault(t *testing.T) {
 
 func TestEnv_ShellSafeQuoting(t *testing.T) {
 	app, store, _, _ := newTestAppWithBulk()
-	store.Set("default", "SPECIAL", "has spaces & 'quotes'")
+	if err := store.Set("default", "SPECIAL", "has spaces & 'quotes'"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "env")
 	if err != nil {
@@ -890,8 +960,7 @@ func TestEnv_ShellSafeQuoting(t *testing.T) {
 }
 
 func TestMigrate_FromRawService(t *testing.T) {
-	app, store, bulk, vaults := newTestAppWithBulk()
-	vaults.Create("default")
+	app, store, bulk, _ := newTestAppWithBulk()
 	bulk.rawServices["zshrc-secrets"] = map[string]string{
 		"GH_TOKEN": "ghp_123",
 		"AWS_KEY":  "aws_456",
@@ -915,7 +984,9 @@ func TestMigrate_FromRawService(t *testing.T) {
 
 func TestMigrate_IntoExplicitVault(t *testing.T) {
 	app, store, bulk, vaults := newTestAppWithBulk()
-	vaults.Create("prod")
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
 	bulk.rawServices["legacy-app"] = map[string]string{
 		"DB_URL": "postgres://localhost/db",
 	}
@@ -940,8 +1011,12 @@ func TestMigrate_MissingFromFlag(t *testing.T) {
 
 func TestGetCompletesKeys(t *testing.T) {
 	app, store, _, _ := newTestApp()
-	store.Set("default", "API_KEY", "s1")
-	store.Set("default", "DB_PASS", "s2")
+	if err := store.Set("default", "API_KEY", "s1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("default", "DB_PASS", "s2"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "__complete", "get", "")
 	if err != nil {
@@ -960,8 +1035,12 @@ func TestGetCompletesKeys(t *testing.T) {
 
 func TestDelCompletesKeys(t *testing.T) {
 	app, store, _, _ := newTestApp()
-	store.Set("default", "OLD_KEY", "v1")
-	store.Set("default", "OTHER_KEY", "v2")
+	if err := store.Set("default", "OLD_KEY", "v1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("default", "OTHER_KEY", "v2"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "__complete", "del", "")
 	if err != nil {
@@ -980,8 +1059,12 @@ func TestDelCompletesKeys(t *testing.T) {
 
 func TestGetCompletesKeysWithVaultFlag(t *testing.T) {
 	app, store, vaults, _ := newTestApp()
-	vaults.Create("staging")
-	store.Set("staging", "STAGE_KEY", "sv1")
+	if err := vaults.Create("staging"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("staging", "STAGE_KEY", "sv1"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "__complete", "get", "--vault", "staging", "")
 	if err != nil {
@@ -994,8 +1077,12 @@ func TestGetCompletesKeysWithVaultFlag(t *testing.T) {
 
 func TestGetCompletionFiltersByPrefix(t *testing.T) {
 	app, store, _, _ := newTestApp()
-	store.Set("default", "API_KEY", "s1")
-	store.Set("default", "DB_PASS", "s2")
+	if err := store.Set("default", "API_KEY", "s1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("default", "DB_PASS", "s2"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "__complete", "get", "A")
 	if err != nil {
@@ -1011,8 +1098,12 @@ func TestGetCompletionFiltersByPrefix(t *testing.T) {
 
 func TestVaultFlagCompletionFiltersByPrefix(t *testing.T) {
 	app, _, vaults, _ := newTestApp()
-	vaults.Create("prod")
-	vaults.Create("staging")
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vaults.Create("staging"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "__complete", "get", "--vault", "st")
 	if err != nil {
@@ -1028,8 +1119,12 @@ func TestVaultFlagCompletionFiltersByPrefix(t *testing.T) {
 
 func TestVaultSwitchCompletesVaultNames(t *testing.T) {
 	app, _, vaults, _ := newTestApp()
-	vaults.Create("prod")
-	vaults.Create("staging")
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vaults.Create("staging"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "__complete", "vault", "switch", "")
 	if err != nil {
@@ -1048,8 +1143,12 @@ func TestVaultSwitchCompletesVaultNames(t *testing.T) {
 
 func TestVaultFlagCompletesVaultNames(t *testing.T) {
 	app, _, vaults, _ := newTestApp()
-	vaults.Create("prod")
-	vaults.Create("staging")
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vaults.Create("staging"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "__complete", "get", "--vault", "")
 	if err != nil {

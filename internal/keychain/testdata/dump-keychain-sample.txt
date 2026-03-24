@@ -1,0 +1,14 @@
+keychain: "/Users/test/Library/Keychains/login.keychain-db"
+version: 512
+class: "genp"
+    "svce"<blob>="kc:default"
+    "acct"<blob>="API_KEY"
+    "icmt"<blob>="kc-meta:v1:protected"
+class: "genp"
+    "svce"<blob>="kc:default"
+    "acct"<blob>="LEGACY_KEY"
+    "icmt"<blob>=<NULL>
+class: "genp"
+    "svce"<blob>="kc:prod"
+    "acct"<blob>="OTHER"
+    "icmt"<blob>="kc-meta:v1:protected"

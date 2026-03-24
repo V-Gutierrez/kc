@@ -10,6 +10,9 @@ func weakReasons(value string, minLength int) []string {
 	if trimmed == "" {
 		return []string{"empty value"}
 	}
+	if looksLikeAPIKey(trimmed) {
+		return nil
+	}
 
 	reasons := make([]string, 0, 3)
 	if len(trimmed) < minLength {
@@ -48,4 +51,16 @@ func isCommonWeakPattern(value string) bool {
 func isSuspiciousName(key string) bool {
 	lowered := strings.ToLower(strings.TrimSpace(key))
 	return lowered == "test" || lowered == "temp" || strings.HasPrefix(lowered, "old_") || strings.HasPrefix(lowered, "old-")
+}
+
+func looksLikeAPIKey(value string) bool {
+	if len(value) <= 32 {
+		return false
+	}
+	for _, r := range value {
+		if !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-' || r == ':') {
+			return false
+		}
+	}
+	return true
 }

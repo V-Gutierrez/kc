@@ -172,6 +172,11 @@ func (k *Keychain) List(service string) ([]string, error) {
 
 // parseAccounts extracts "acct" values from dump-keychain output
 // for entries whose "svce" (service) matches the target.
+//
+// This parser is intentionally conservative because `security dump-keychain`
+// output is a loosely structured text format rather than a stable machine API.
+// Tests use fixture samples to document the exact shapes we currently accept,
+// including NULL comments and mixed service blocks.
 func parseAccounts(dump, service string) []string {
 	items := parseMetadata(dump, service)
 	var accounts []string

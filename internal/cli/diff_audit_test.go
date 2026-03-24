@@ -9,10 +9,18 @@ import (
 
 func TestDiffEnvVsVault(t *testing.T) {
 	app, store, vaults, _ := newTestApp()
-	vaults.Create("prod")
-	store.Set("prod", "A", "same")
-	store.Set("prod", "B", "old")
-	store.Set("prod", "D", "vault-only")
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("prod", "A", "same"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("prod", "B", "old"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("prod", "D", "vault-only"); err != nil {
+		t.Fatal(err)
+	}
 
 	envFile := filepath.Join(t.TempDir(), ".env")
 	if err := os.WriteFile(envFile, []byte("A=same\nB=new\nC=env-only\n"), 0o600); err != nil {
@@ -35,10 +43,18 @@ func TestDiffEnvVsVault(t *testing.T) {
 
 func TestDiffVaultToVault(t *testing.T) {
 	app, store, vaults, _ := newTestApp()
-	vaults.Create("dev")
-	vaults.Create("prod")
-	store.Set("dev", "KEY", "one")
-	store.Set("prod", "KEY", "two")
+	if err := vaults.Create("dev"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("dev", "KEY", "one"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("prod", "KEY", "two"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "diff", "--vault", "dev", "--vault", "prod")
 	if err != nil {
@@ -51,11 +67,21 @@ func TestDiffVaultToVault(t *testing.T) {
 
 func TestAuditFindings(t *testing.T) {
 	app, store, vaults, _ := newTestApp()
-	vaults.Create("prod")
-	store.Set("default", "API_KEY", "shared-secret-value!")
-	store.Set("default", "TEMP", "password")
-	store.Set("prod", "DUPLICATE", "shared-secret-value!")
-	store.Set("prod", "old_token", "abc123")
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("default", "API_KEY", "shared-secret-value!"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("default", "TEMP", "password"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("prod", "DUPLICATE", "shared-secret-value!"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("prod", "old_token", "abc123"); err != nil {
+		t.Fatal(err)
+	}
 
 	envFile := filepath.Join(t.TempDir(), ".env")
 	if err := os.WriteFile(envFile, []byte("API_KEY=shared-secret-value!\n"), 0o600); err != nil {
@@ -75,7 +101,9 @@ func TestAuditFindings(t *testing.T) {
 
 func TestAuditCleanVault(t *testing.T) {
 	app, store, _, _ := newTestApp()
-	store.Set("default", "API_KEY", "long-secret-value!@#")
+	if err := store.Set("default", "API_KEY", "long-secret-value!@#"); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("API_KEY", "present")
 
 	stdout, _, err := executeCmd(app, "audit", "--vault", "default")

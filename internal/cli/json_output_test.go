@@ -8,8 +8,12 @@ import (
 
 func TestListJSON(t *testing.T) {
 	app, store, _, _ := newTestApp()
-	store.Set("default", "B", "2")
-	store.Set("default", "A", "1")
+	if err := store.Set("default", "B", "2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("default", "A", "1"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, stderr, err := executeCmd(app, "list", "--json")
 	if err != nil {
@@ -39,7 +43,9 @@ func TestListJSON(t *testing.T) {
 
 func TestListJSONShowValues(t *testing.T) {
 	app, store, _, _ := newTestApp()
-	store.Set("default", "API_KEY", "secret123")
+	if err := store.Set("default", "API_KEY", "secret123"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "list", "--json", "--show-values")
 	if err != nil {
@@ -72,7 +78,9 @@ func TestListJSONEmpty(t *testing.T) {
 
 func TestGetJSON(t *testing.T) {
 	app, store, _, clip := newTestApp()
-	store.Set("default", "API_KEY", "secret123")
+	if err := store.Set("default", "API_KEY", "secret123"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, stderr, err := executeCmd(app, "get", "API_KEY", "--json")
 	if err != nil {
@@ -96,7 +104,9 @@ func TestGetJSON(t *testing.T) {
 
 func TestListShowValuesText(t *testing.T) {
 	app, store, _, _ := newTestApp()
-	store.Set("default", "API_KEY", "secret123")
+	if err := store.Set("default", "API_KEY", "secret123"); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "list", "--show-values")
 	if err != nil {

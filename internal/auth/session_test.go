@@ -46,3 +46,19 @@ func TestSessionDoesNotCacheFailures(t *testing.T) {
 		t.Fatalf("authorizer calls = %d, want 2", authorizer.calls)
 	}
 }
+
+func TestNilSessionAuthorizeReturnsNil(t *testing.T) {
+	var session *Session
+
+	if err := session.Authorize("Unlock kc secrets"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNilAuthorizerReturnsNil(t *testing.T) {
+	session := NewSession(nil)
+
+	if err := session.Authorize("Unlock kc secrets"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

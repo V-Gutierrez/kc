@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -9,6 +10,7 @@ import (
 type mockStore struct {
 	keys     map[string][]string
 	values   map[string]map[string]string
+	listErr  error
 	getCalls []storeCall
 	setCalls []setCall
 	delCalls []storeCall
@@ -68,6 +70,9 @@ func (m *mockStore) Delete(vault, key string) error {
 }
 
 func (m *mockStore) List(vault string) ([]string, error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
 	keys := append([]string(nil), m.keys[vault]...)
 	return keys, nil
 }
@@ -304,5 +309,121 @@ func TestAddEditAndDeleteFlows(t *testing.T) {
 	}
 	if model.mode != modeBrowse {
 		t.Fatalf("mode after delete confirm = %v, want modeBrowse", model.mode)
+	}
+}
+
+func TestDeleteConfirmCancelWithN(t *testing.T) {
+	store := newMockStore()
+	m := NewModel(Deps{Store: store})
+	updated, _ := m.Update(loadedMsg{items: []entry{{Vault: "default", Key: "TOKEN"}}, activeVault: "default"})
+	model := updated.(Model)
+	model.mode = modeConfirmDelete
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	model = updated.(Model)
+	if cmd != nil {
+		t.Fatal("cancel should not return a command")
+	}
+	if model.mode != modeBrowse {
+		t.Fatalf("mode = %v, want modeBrowse", model.mode)
+	}
+	if len(store.delCalls) != 0 {
+		t.Fatalf("delete calls = %d, want 0", len(store.delCalls))
+	}
+}
+
+func TestHandleFormKeyEscCancel(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.mode = modeAdd
+	m.form = newFormState("default", "", "")
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+	if model.mode != modeBrowse {
+		t.Fatalf("mode = %v, want modeBrowse", model.mode)
+	}
+}
+
+func TestHandleFormKeyTabCyclesFocus(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.mode = modeAdd
+	m.form = newFormState("default", "", "")
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	model := updated.(Model)
+	if model.form.focus != 2 {
+		t.Fatalf("focus = %d, want 2", model.form.focus)
+	}
+}
+
+func TestHandleFormKeyEnterSubmits(t *testing.T) {
+	store := newMockStore()
+	m := NewModel(Deps{Store: store})
+	m.mode = modeAdd
+	m.activeVault = "default"
+	m.form = newFormState("default", "TOKEN", "secret")
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected save command")
+	}
+	msg := cmd()
+	updated, _ = model.Update(msg)
+	model = updated.(Model)
+	if model.mode != modeBrowse {
+		t.Fatalf("mode = %v, want modeBrowse", model.mode)
+	}
+	if len(store.setCalls) != 1 {
+		t.Fatalf("set calls = %d, want 1", len(store.setCalls))
+	}
+}
+
+func TestLoadEntriesCmdStoreListError(t *testing.T) {
+	store := newMockStore()
+	store.listErr = errors.New("list failed")
+	msg := loadEntriesCmd(Deps{Store: store, Vaults: &mockVaults{list: []string{"default"}, active: "default"}})()
+	loaded := msg.(loadedMsg)
+	if loaded.err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestCopyCmd(t *testing.T) {
+	store := newMockStore()
+	store.keys["default"] = []string{"TOKEN"}
+	store.values["default"] = map[string]string{"TOKEN": "secret"}
+	clipboard := &mockClipboard{}
+	m := NewModel(Deps{Store: store, Clipboard: clipboard})
+	updated, _ := m.Update(loadedMsg{items: []entry{{Vault: "default", Key: "TOKEN"}}, activeVault: "default"})
+	model := updated.(Model)
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	model = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected copy command")
+	}
+	msg := cmd()
+	updated, _ = model.Update(msg)
+	model = updated.(Model)
+	if clipboard.values[0] != "secret" {
+		t.Fatalf("clipboard = %#v, want secret", clipboard.values)
+	}
+	if model.status == "" {
+		t.Fatal("expected status message")
+	}
+}
+
+func TestMaskedValueRevealed(t *testing.T) {
+	got := maskedValue(entry{Vault: "default", Key: "TOKEN"}, previewState{vault: "default", key: "TOKEN", value: "secret", revealed: true})
+	if got != "secret" {
+		t.Fatalf("maskedValue = %q, want secret", got)
+	}
+}
+
+func TestMaskedValueRevealedEmpty(t *testing.T) {
+	got := maskedValue(entry{Vault: "default", Key: "TOKEN"}, previewState{vault: "default", key: "TOKEN", value: "   ", revealed: true})
+	if got != "[empty]" {
+		t.Fatalf("maskedValue = %q, want [empty]", got)
 	}
 }

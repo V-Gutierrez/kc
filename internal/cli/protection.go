@@ -17,15 +17,3 @@ func isProtected(metadata []SecretMetadata, key string) bool {
 	}
 	return false
 }
-
-func listItemsWithProtection(items []SecretMetadata) []map[string]string {
-	result := make([]map[string]string, 0, len(items))
-	for _, item := range items {
-		result = append(result, map[string]string{
-			"key":        item.Key,
-			"vault":      item.Vault,
-			"protection": item.Protection,
-		})
-	}
-	return result
-}

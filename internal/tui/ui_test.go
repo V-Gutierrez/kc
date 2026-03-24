@@ -115,3 +115,41 @@ func TestAlternatingRowsRenderDifferently(t *testing.T) {
 		t.Fatalf("expected alternating row render output to differ, even=%q odd=%q", even.String(), odd.String())
 	}
 }
+
+func TestStatusViewDefault(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	if got := m.statusView(); !strings.Contains(got, "Ready") {
+		t.Fatalf("statusView = %q, want Ready", got)
+	}
+}
+
+func TestPreviewViewShowsSelectedEntry(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.entries = []entry{{Vault: "default", Key: "TOKEN"}}
+	m.applyFilters()
+	output := m.previewView()
+	if !strings.Contains(output, "TOKEN") {
+		t.Fatalf("previewView = %q, want selected key", output)
+	}
+}
+
+func TestOverlayViewConfirmDelete(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.entries = []entry{{Vault: "default", Key: "TOKEN"}}
+	m.applyFilters()
+	m.mode = modeConfirmDelete
+	output := m.overlayView()
+	if !strings.Contains(output, "Delete TOKEN from default? (y/n)") {
+		t.Fatalf("overlayView = %q, want delete confirmation", output)
+	}
+}
+
+func TestHelpViewContainsBindings(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	output := m.helpView()
+	for _, want := range []string{"/ search", "c copy", "d delete"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("helpView = %q, want %q", output, want)
+		}
+	}
+}

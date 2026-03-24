@@ -257,7 +257,9 @@ func TestSwitch_InvalidName(t *testing.T) {
 
 func TestGet_UsesActiveVault(t *testing.T) {
 	mgr, kc := newTestManager(t)
-	kc.Set("kc:default", "API_KEY", "secret123")
+	if err := kc.Set("kc:default", "API_KEY", "secret123"); err != nil {
+		t.Fatal(err)
+	}
 
 	val, err := mgr.Get("API_KEY", "")
 	if err != nil {
@@ -271,7 +273,9 @@ func TestGet_UsesActiveVault(t *testing.T) {
 func TestGet_UsesExplicitVault(t *testing.T) {
 	mgr, kc := newTestManager(t)
 	_ = mgr.Create("prod")
-	kc.Set("kc:prod", "DB_PASS", "prod-pass")
+	if err := kc.Set("kc:prod", "DB_PASS", "prod-pass"); err != nil {
+		t.Fatal(err)
+	}
 
 	val, err := mgr.Get("DB_PASS", "prod")
 	if err != nil {
@@ -300,7 +304,9 @@ func TestSet_UsesActiveVault(t *testing.T) {
 
 func TestDelete_UsesActiveVault(t *testing.T) {
 	mgr, kc := newTestManager(t)
-	kc.Set("kc:default", "TOKEN", "xyz")
+	if err := kc.Set("kc:default", "TOKEN", "xyz"); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := mgr.Delete("TOKEN", ""); err != nil {
 		t.Fatal(err)
@@ -316,8 +322,12 @@ func TestListKeys(t *testing.T) {
 	if err := mgr.Create("default"); err != nil && !errors.Is(err, ErrAlreadyExists) {
 		t.Fatal(err)
 	}
-	kc.Set("kc:default", "A", "1")
-	kc.Set("kc:default", "B", "2")
+	if err := kc.Set("kc:default", "A", "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := kc.Set("kc:default", "B", "2"); err != nil {
+		t.Fatal(err)
+	}
 
 	keys, err := mgr.ListKeys("")
 	if err != nil {
@@ -348,8 +358,12 @@ func TestGet_InvalidExplicitVaultName(t *testing.T) {
 
 func TestReadRawService_ReadsArbitraryService(t *testing.T) {
 	mgr, kc := newTestManager(t)
-	kc.Set("zshrc-secrets", "GITHUB_TOKEN", "ghp_abc")
-	kc.Set("zshrc-secrets", "AWS_SECRET", "aws-secret")
+	if err := kc.Set("zshrc-secrets", "GITHUB_TOKEN", "ghp_abc"); err != nil {
+		t.Fatal(err)
+	}
+	if err := kc.Set("zshrc-secrets", "AWS_SECRET", "aws-secret"); err != nil {
+		t.Fatal(err)
+	}
 
 	entries, err := mgr.ReadRawService("zshrc-secrets")
 	if err != nil {
@@ -450,8 +464,12 @@ func TestBulkSet_UnknownVault(t *testing.T) {
 
 func TestGetAllKeys_ReturnsAllKeyValues(t *testing.T) {
 	mgr, kc := newTestManager(t)
-	kc.Set("kc:default", "FOO", "bar")
-	kc.Set("kc:default", "BAZ", "qux")
+	if err := kc.Set("kc:default", "FOO", "bar"); err != nil {
+		t.Fatal(err)
+	}
+	if err := kc.Set("kc:default", "BAZ", "qux"); err != nil {
+		t.Fatal(err)
+	}
 
 	entries, err := mgr.GetAllKeys("")
 	if err != nil {
@@ -471,7 +489,9 @@ func TestGetAllKeys_ReturnsAllKeyValues(t *testing.T) {
 func TestGetAllKeys_ExplicitVault(t *testing.T) {
 	mgr, kc := newTestManager(t)
 	_ = mgr.Create("staging")
-	kc.Set("kc:staging", "HOST", "localhost")
+	if err := kc.Set("kc:staging", "HOST", "localhost"); err != nil {
+		t.Fatal(err)
+	}
 
 	entries, err := mgr.GetAllKeys("staging")
 	if err != nil {

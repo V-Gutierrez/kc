@@ -66,9 +66,11 @@ func NewRootCmd(app *App) *cobra.Command {
 	}
 
 	root.PersistentFlags().String("vault", "", "target vault (overrides active vault)")
-	root.RegisterFlagCompletionFunc("vault", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if err := root.RegisterFlagCompletionFunc("vault", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return completeVaults(app, toComplete)
-	})
+	}); err != nil {
+		panic(err)
+	}
 	root.Flags().BoolP("interactive", "i", false, "launch interactive TUI")
 
 	root.CompletionOptions.DisableDefaultCmd = true

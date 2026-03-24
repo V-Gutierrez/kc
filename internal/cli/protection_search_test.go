@@ -38,8 +38,12 @@ func TestSetNoProtectStoresUnprotected(t *testing.T) {
 
 func TestListProtectedShowsProtectionStatus(t *testing.T) {
 	app, store, _, _ := newTestApp()
-	store.SetWithProtection("default", "API_KEY", "secret", true)
-	store.SetWithProtection("default", "PUBLIC_KEY", "value", false)
+	if err := store.SetWithProtection("default", "API_KEY", "secret", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetWithProtection("default", "PUBLIC_KEY", "value", false); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "list", "--protected")
 	if err != nil {
@@ -55,9 +59,15 @@ func TestListProtectedShowsProtectionStatus(t *testing.T) {
 
 func TestSearchAcrossVaultsShowsProtection(t *testing.T) {
 	app, store, _, vaults := newTestAppWithBulk()
-	vaults.Create("prod")
-	store.SetWithProtection("default", "MONGO_URL", "mongodb://default", true)
-	store.SetWithProtection("prod", "MONGO_PASSWORD", "secret", false)
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetWithProtection("default", "MONGO_URL", "mongodb://default", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetWithProtection("prod", "MONGO_PASSWORD", "secret", false); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "search", "mongo")
 	if err != nil {
@@ -73,7 +83,9 @@ func TestSearchAcrossVaultsShowsProtection(t *testing.T) {
 
 func TestSearchJSONIncludesProtectionAndOmitValuesByDefault(t *testing.T) {
 	app, store, _, _ := newTestAppWithBulk()
-	store.SetWithProtection("default", "MONGO_URL", "mongodb://default", true)
+	if err := store.SetWithProtection("default", "MONGO_URL", "mongodb://default", true); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "search", "mongo", "--json")
 	if err != nil {
@@ -97,7 +109,9 @@ func TestSearchJSONIncludesProtectionAndOmitValuesByDefault(t *testing.T) {
 
 func TestProtectAllMarksExistingEntriesProtected(t *testing.T) {
 	app, store, _, _ := newTestApp()
-	store.SetWithProtection("default", "LEGACY_KEY", "legacy", false)
+	if err := store.SetWithProtection("default", "LEGACY_KEY", "legacy", false); err != nil {
+		t.Fatal(err)
+	}
 
 	stdout, _, err := executeCmd(app, "protect", "--all")
 	if err != nil {
