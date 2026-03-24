@@ -21,7 +21,7 @@
 
 <p align="center">
   <a href="https://github.com/v-gutierrez/kc/actions/workflows/ci.yml"><img src="https://github.com/v-gutierrez/kc/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <img src="https://img.shields.io/badge/version-v0.3.0-blue" alt="Version" />
+  <img src="https://img.shields.io/github/v/release/v-gutierrez/kc" alt="Version" />
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey" alt="macOS" />
 </p>
 
