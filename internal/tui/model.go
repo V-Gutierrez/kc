@@ -91,10 +91,12 @@ type previewState struct {
 }
 
 type formState struct {
-	vault textinput.Model
-	key   textinput.Model
-	value textinput.Model
-	focus int
+	vault       textinput.Model
+	key         textinput.Model
+	value       textinput.Model
+	focus       int
+	isProtected bool
+	confirming  bool
 }
 
 type loadedMsg struct {
@@ -244,9 +246,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.upsertEntry(msg.entry)
 		m.clearPreview()
 		m.mode = modeBrowse
-		m.status = fmt.Sprintf("Saved %s in %s", msg.entry.Key, msg.entry.Vault)
+		m.flashToken++
+		m.flashMessage = fmt.Sprintf("✓ Saved %s to vault:%s", msg.entry.Key, msg.entry.Vault)
 		m.applyFilters()
-		return m, nil
+		return m, tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
+			return clearFlashMsg{token: m.flashToken}
+		})
 	case deletedMsg:
 		m.removeEntry(msg.entry)
 		m.clearPreview()
@@ -354,6 +359,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			value = m.preview.value
 		}
 		m.form = newFormState(selected.Vault, selected.Key, value)
+		m.form.isProtected = selected.Protection != protectionUnprotected
 		return m, textinput.Blink
 	case key.Matches(msg, m.keys.Delete):
 		if _, ok := m.selectedEntry(); ok {
@@ -413,20 +419,44 @@ func (m Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.form.confirming {
+		if key.Matches(msg, m.keys.Confirm) {
+			return m.submitForm()
+		}
+		if key.Matches(msg, m.keys.Cancel) {
+			m.form.confirming = false
+			return m, nil
+		}
+		return m, nil
+	}
+
 	if key.Matches(msg, m.keys.Cancel) {
 		m.mode = modeBrowse
 		m.clearPreview()
 		return m, nil
 	}
 	if key.Matches(msg, m.keys.Confirm) {
-		next, cmd := m.submitForm()
-		return next, cmd
+		m.form.confirming = true
+		return m, nil
 	}
 	if msg.String() == "tab" {
-		m.form.focus = (m.form.focus + 1) % 3
+		m.form.focus = (m.form.focus + 1) % 4
 		m.focusForm()
 		return m, nil
 	}
+	if msg.String() == "ctrl+r" && m.form.focus == 2 {
+		if m.form.value.EchoMode == textinput.EchoPassword {
+			m.form.value.EchoMode = textinput.EchoNormal
+		} else {
+			m.form.value.EchoMode = textinput.EchoPassword
+		}
+		return m, nil
+	}
+	if msg.String() == " " && m.form.focus == 3 {
+		m.form.isProtected = !m.form.isProtected
+		return m, nil
+	}
+
 	var cmd tea.Cmd
 	switch m.form.focus {
 	case 0:
@@ -459,7 +489,11 @@ func (m Model) submitForm() (Model, tea.Cmd) {
 	if vault == "" {
 		vault = m.activeVault
 	}
-	entry := entry{Vault: vault, Key: keyName, Protection: protectionProtected}
+	protection := protectionUnprotected
+	if m.form.isProtected {
+		protection = protectionProtected
+	}
+	entry := entry{Vault: vault, Key: keyName, Protection: protection}
 	return m, saveCmd(m.deps, entry, value)
 }
 
@@ -602,7 +636,9 @@ func newFormState(vault, keyName, value string) formState {
 	valueInput := textinput.New()
 	valueInput.SetValue(value)
 	valueInput.Prompt = "value> "
-	form := formState{vault: vaultInput, key: keyInput, value: valueInput, focus: 2}
+	valueInput.EchoMode = textinput.EchoPassword
+	valueInput.EchoCharacter = '•'
+	form := formState{vault: vaultInput, key: keyInput, value: valueInput, focus: 2, isProtected: true}
 	if keyName == "" {
 		form.focus = 1
 	}
@@ -696,10 +732,10 @@ func copyKnownCmd(deps Deps, item entry, value string) tea.Cmd {
 
 func saveCmd(deps Deps, item entry, value string) tea.Cmd {
 	return func() tea.Msg {
-		if err := deps.Store.SetWithProtection(item.Vault, item.Key, value, true); err != nil {
+		protected := item.Protection == protectionProtected
+		if err := deps.Store.SetWithProtection(item.Vault, item.Key, value, protected); err != nil {
 			return errMsg{err: err}
 		}
-		item.Protection = protectionProtected
 		return savedMsg{entry: item, value: value}
 	}
 }
@@ -775,6 +811,35 @@ func (m Model) previewView() string {
 	return m.styles.preview.Render(strings.Join(lines, "\n"))
 }
 
+func (m Model) vaultExists(name string) bool {
+	for _, v := range m.vaults {
+		if v == name && v != allVaultsLabel {
+			return true
+		}
+	}
+	return false
+}
+
+func (m Model) keyExists(vault, key string) bool {
+	for _, e := range m.entries {
+		if e.Vault == vault && e.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+func (m Model) vaultHints() []string {
+	hints := make([]string, 0, len(m.vaults))
+	for _, vault := range m.vaults {
+		if vault == allVaultsLabel {
+			continue
+		}
+		hints = append(hints, vault)
+	}
+	return hints
+}
+
 func (m Model) overlayView() string {
 	if m.mode == modeConfirmDelete {
 		item, _ := m.selectedEntry()
@@ -783,21 +848,78 @@ func (m Model) overlayView() string {
 				fmt.Sprintf("Delete %s from %s? (y/n)", item.Key, item.Vault),
 		)
 	}
+
+	if m.form.confirming {
+		vault := strings.TrimSpace(m.form.vault.Value())
+		if vault == "" {
+			vault = m.activeVault
+		}
+		key := strings.TrimSpace(m.form.key.Value())
+		prot := "🔐 protected"
+		if !m.form.isProtected {
+			prot = "🔓 unprotected"
+		}
+		return m.styles.overlay.Render(
+			m.styles.header.Render("Confirm Save") + "\n\n" +
+				fmt.Sprintf("Save %s to vault:%s (%s)?", key, vault, prot) + "\n\n" +
+				m.styles.help.Render("[Enter] confirm / [Esc] cancel"),
+		)
+	}
+
 	title := "Add key"
 	if m.mode == modeEdit {
 		title = "Edit key"
 	}
+
+	vaultVal := strings.TrimSpace(m.form.vault.Value())
+	if vaultVal == "" {
+		vaultVal = m.activeVault
+	}
+
+	vaultHint := m.styles.subtle.Render("(new vault)")
+	if m.vaultExists(vaultVal) {
+		vaultHint = m.styles.success.Render("existing vault")
+	}
+	vaultNames := m.vaultHints()
+	vaultList := ""
+	if len(vaultNames) > 0 {
+		vaultList = m.styles.subtle.Render("Vaults: " + strings.Join(vaultNames, ", "))
+	}
+
+	keyVal := strings.TrimSpace(m.form.key.Value())
+	keyNamingHint := m.styles.subtle.Render("Use UPPER_SNAKE_CASE")
+	keyWarning := ""
+	if keyVal != "" && m.keyExists(vaultVal, keyVal) && m.mode == modeAdd {
+		keyWarning = m.styles.warning.Render("⚠ Key exists, will overwrite")
+	}
+
+	protChecked := "[ ] "
+	if m.form.isProtected {
+		protChecked = "[x] "
+	}
+
+	protStyle := m.styles.normal
+	if m.form.focus == 3 {
+		protStyle = m.styles.selected
+	}
+
 	content := []string{
 		m.styles.header.Render(title),
 		"",
 		m.styles.inputLabel.Render("Vault"),
 		m.form.vault.View(),
+		vaultList,
+		vaultHint,
 		"",
 		m.styles.inputLabel.Render("Key"),
 		m.form.key.View(),
+		keyNamingHint,
+		keyWarning,
 		"",
-		m.styles.inputLabel.Render("Value"),
+		m.styles.inputLabel.Render("Value") + m.styles.subtle.Render(" (Ctrl+R reveal/hide)"),
 		m.form.value.View(),
+		"",
+		protStyle.Render(protChecked+"Touch ID protected") + m.styles.subtle.Render(" (Space toggle)"),
 		"",
 		m.styles.help.Render("Enter save • Esc cancel • Tab next field"),
 	}

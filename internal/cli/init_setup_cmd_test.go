@@ -62,6 +62,23 @@ func TestInitRejectsUnsupportedShell(t *testing.T) {
 	}
 }
 
+func TestInitCompletesShellNames(t *testing.T) {
+	app, _, _, _ := newTestAppWithBulk()
+
+	stdout, _, err := executeCmd(app, "__complete", "init", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, shell := range []string{"zsh", "bash", "fish"} {
+		if !strings.Contains(stdout, shell) {
+			t.Errorf("completion missing %s: %q", shell, stdout)
+		}
+	}
+	if !strings.Contains(stdout, ":4") {
+		t.Errorf("expected NoFileComp directive (:4) in output: %q", stdout)
+	}
+}
+
 func TestSetupMigratesZshSecretsAndInjectsSnippet(t *testing.T) {
 	app, store, _, _ := newTestAppWithBulk()
 	home := t.TempDir()

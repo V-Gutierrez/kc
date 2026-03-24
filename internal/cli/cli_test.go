@@ -115,6 +115,7 @@ func (m *mockStore) ProtectAll(vault string) (int, error) {
 type mockVaultManager struct {
 	vaults []string
 	active string
+	store  *mockStore
 }
 
 func (m *mockVaultManager) List() ([]string, error) {
@@ -128,6 +129,44 @@ func (m *mockVaultManager) Create(name string) error {
 		}
 	}
 	m.vaults = append(m.vaults, name)
+	return nil
+}
+
+func (m *mockVaultManager) Delete(name string, force bool) error {
+	if name == "default" {
+		return fmt.Errorf("vault: cannot delete the default vault")
+	}
+	found := false
+	for _, v := range m.vaults {
+		if v == name {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("vault %q does not exist", name)
+	}
+
+	if m.store != nil {
+		keys, _ := m.store.List(name)
+		if len(keys) > 0 && !force {
+			return fmt.Errorf("Vault has %d keys. Delete them first or use --force.", len(keys))
+		}
+		for _, k := range keys {
+			_ = m.store.Delete(name, k)
+		}
+	}
+
+	filtered := make([]string, 0, len(m.vaults)-1)
+	for _, v := range m.vaults {
+		if v != name {
+			filtered = append(filtered, v)
+		}
+	}
+	m.vaults = filtered
+	if m.active == name {
+		m.active = "default"
+	}
 	return nil
 }
 
@@ -173,7 +212,7 @@ func (m *mockClipboard) Copy(value string) error {
 func newTestApp() (*cli.App, *mockStore, *mockVaultManager, *mockClipboard) {
 	store := newMockStore()
 	bulk := &mockBulkStore{mockStore: store, rawServices: make(map[string]map[string]string)}
-	vaults := &mockVaultManager{vaults: []string{"default"}, active: "default"}
+	vaults := &mockVaultManager{vaults: []string{"default"}, active: "default", store: store}
 	clip := &mockClipboard{}
 	app := &cli.App{Store: store, Bulk: bulk, Vaults: vaults, Clipboard: clip}
 	return app, store, vaults, clip
@@ -519,6 +558,123 @@ func TestVaultSwitchNonexistent(t *testing.T) {
 	}
 }
 
+func TestVaultDeleteEmpty(t *testing.T) {
+	app, _, vaults, _ := newTestApp()
+	if err := vaults.Create("staging"); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, err := executeCmd(app, "vault", "delete", "staging")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, "Deleted vault") {
+		t.Errorf("stdout = %q, want confirmation", stdout)
+	}
+	for _, v := range vaults.vaults {
+		if v == "staging" {
+			t.Fatal("staging should have been removed")
+		}
+	}
+}
+
+func TestVaultDeleteWithKeysNoForce(t *testing.T) {
+	app, store, vaults, _ := newTestApp()
+	if err := vaults.Create("staging"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("staging", "K1", "v1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("staging", "K2", "v2"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := executeCmd(app, "vault", "delete", "staging")
+	if err == nil {
+		t.Fatal("expected error when vault has keys")
+	}
+	if !strings.Contains(err.Error(), "Vault has 2 keys. Delete them first or use --force.") {
+		t.Fatalf("error = %q, want keys warning", err.Error())
+	}
+}
+
+func TestVaultDeleteWithKeysForce(t *testing.T) {
+	app, store, vaults, _ := newTestApp()
+	if err := vaults.Create("staging"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("staging", "K1", "v1"); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, err := executeCmd(app, "vault", "delete", "staging", "--force")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, "Deleted vault") {
+		t.Errorf("stdout = %q, want confirmation", stdout)
+	}
+}
+
+func TestVaultDeleteDefault(t *testing.T) {
+	app, _, _, _ := newTestApp()
+	_, _, err := executeCmd(app, "vault", "delete", "default")
+	if err == nil {
+		t.Fatal("expected error deleting default vault")
+	}
+}
+
+func TestVaultDeleteNonexistent(t *testing.T) {
+	app, _, _, _ := newTestApp()
+	_, _, err := executeCmd(app, "vault", "delete", "nope")
+	if err == nil {
+		t.Fatal("expected error deleting non-existent vault")
+	}
+}
+
+func TestVaultDeleteCompletesVaultNames(t *testing.T) {
+	app, _, vaults, _ := newTestApp()
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vaults.Create("staging"); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, err := executeCmd(app, "__complete", "vault", "delete", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, "prod") {
+		t.Errorf("completion missing prod: %q", stdout)
+	}
+	if !strings.Contains(stdout, "staging") {
+		t.Errorf("completion missing staging: %q", stdout)
+	}
+	if !strings.Contains(stdout, ":4") {
+		t.Errorf("expected NoFileComp directive (:4) in output: %q", stdout)
+	}
+}
+
+func TestVaultDeleteActiveVaultSwitchesToDefault(t *testing.T) {
+	app, _, vaults, _ := newTestApp()
+	if err := vaults.Create("staging"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vaults.Switch("staging"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := executeCmd(app, "vault", "delete", "staging")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if vaults.active != "default" {
+		t.Fatalf("active = %q, want %q", vaults.active, "default")
+	}
+}
+
 func TestActiveVaultFallback(t *testing.T) {
 	app, store, vaults, _ := newTestApp()
 	if err := vaults.Create("staging"); err != nil {
@@ -543,7 +699,6 @@ func TestActiveVaultFallback(t *testing.T) {
 
 func TestDefaultVaultFallback(t *testing.T) {
 	store := newMockStore()
-	// VaultManager with empty active.
 	vaults := &mockVaultManager{vaults: []string{"default"}, active: ""}
 	app := &cli.App{Store: store, Vaults: vaults, Clipboard: nil}
 
@@ -637,7 +792,7 @@ func TestUnknownCommand(t *testing.T) {
 func newTestAppWithBulk() (*cli.App, *mockStore, *mockBulkStore, *mockVaultManager) {
 	store := newMockStore()
 	bulk := &mockBulkStore{mockStore: store, rawServices: make(map[string]map[string]string)}
-	vaults := &mockVaultManager{vaults: []string{"default"}, active: "default"}
+	vaults := &mockVaultManager{vaults: []string{"default"}, active: "default", store: store}
 	clip := &mockClipboard{}
 	app := &cli.App{Store: store, Bulk: bulk, Vaults: vaults, Clipboard: clip}
 	return app, store, bulk, vaults

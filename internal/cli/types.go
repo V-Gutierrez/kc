@@ -30,6 +30,7 @@ type KeychainStore interface {
 type VaultManager interface {
 	List() ([]string, error)
 	Create(name string) error
+	Delete(name string, force bool) error
 	Active() (string, error)
 	Switch(name string) error
 }

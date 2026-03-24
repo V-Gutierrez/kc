@@ -502,6 +502,114 @@ func TestGetAllKeys_ExplicitVault(t *testing.T) {
 	}
 }
 
+// --- DeleteVault ---
+
+func TestDeleteVault_Empty(t *testing.T) {
+	mgr, _ := newTestManager(t)
+	_ = mgr.Create("staging")
+
+	if err := mgr.DeleteVault("staging", false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	vaults, err := mgr.ListVaults()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range vaults {
+		if v == "staging" {
+			t.Fatal("staging should have been removed from vault list")
+		}
+	}
+}
+
+func TestDeleteVault_WithKeysNoForce(t *testing.T) {
+	mgr, kc := newTestManager(t)
+	_ = mgr.Create("staging")
+	_ = kc.Set("kc:staging", "KEY1", "v1")
+	_ = kc.Set("kc:staging", "KEY2", "v2")
+
+	err := mgr.DeleteVault("staging", false)
+	if err == nil {
+		t.Fatal("expected error when vault has keys and force=false")
+	}
+	want := "Vault has 2 keys. Delete them first or use --force."
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestDeleteVault_WithKeysForce(t *testing.T) {
+	mgr, kc := newTestManager(t)
+	_ = mgr.Create("staging")
+	_ = kc.Set("kc:staging", "KEY1", "v1")
+	_ = kc.Set("kc:staging", "KEY2", "v2")
+
+	if err := mgr.DeleteVault("staging", true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	vaults, _ := mgr.ListVaults()
+	for _, v := range vaults {
+		if v == "staging" {
+			t.Fatal("staging should have been removed")
+		}
+	}
+
+	keys, _ := kc.List("kc:staging")
+	if len(keys) != 0 {
+		t.Fatalf("expected 0 keys, got %d", len(keys))
+	}
+}
+
+func TestDeleteVault_DefaultVault(t *testing.T) {
+	mgr, _ := newTestManager(t)
+
+	err := mgr.DeleteVault("default", false)
+	if !errors.Is(err, ErrDefaultVault) {
+		t.Fatalf("expected ErrDefaultVault, got %v", err)
+	}
+}
+
+func TestDeleteVault_DefaultVaultForce(t *testing.T) {
+	mgr, _ := newTestManager(t)
+
+	err := mgr.DeleteVault("default", true)
+	if !errors.Is(err, ErrDefaultVault) {
+		t.Fatalf("expected ErrDefaultVault even with force, got %v", err)
+	}
+}
+
+func TestDeleteVault_NotFound(t *testing.T) {
+	mgr, _ := newTestManager(t)
+
+	err := mgr.DeleteVault("nonexistent", false)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestDeleteVault_InvalidName(t *testing.T) {
+	mgr, _ := newTestManager(t)
+
+	err := mgr.DeleteVault("bad name", false)
+	if !errors.Is(err, ErrInvalidName) {
+		t.Fatalf("expected ErrInvalidName, got %v", err)
+	}
+}
+
+func TestDeleteVault_ActiveVaultSwitchesToDefault(t *testing.T) {
+	mgr, _ := newTestManager(t)
+	_ = mgr.Create("staging")
+	_ = mgr.Switch("staging")
+
+	if err := mgr.DeleteVault("staging", false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := mgr.ActiveVault(); got != DefaultVault {
+		t.Fatalf("active vault = %q, want %q", got, DefaultVault)
+	}
+}
+
 // --- validateName ---
 
 func TestValidateName(t *testing.T) {

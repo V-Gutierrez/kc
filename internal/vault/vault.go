@@ -28,6 +28,7 @@ var (
 	ErrNotFound      = errors.New("vault: not found")
 	ErrAlreadyExists = errors.New("vault: already exists")
 	ErrInvalidName   = errors.New("vault: invalid name (must be non-empty alphanumeric/dash/underscore)")
+	ErrDefaultVault  = errors.New("vault: cannot delete the default vault")
 )
 
 // KeychainBackend is the subset of keychain operations vault needs.
@@ -174,6 +175,56 @@ func (m *Manager) Create(name string) error {
 }
 
 // --- CRUD pass-through using active vault ---
+
+// DeleteVault removes a vault and optionally force-deletes its keys.
+func (m *Manager) DeleteVault(name string, force bool) error {
+	if err := validateName(name); err != nil {
+		return err
+	}
+	if name == DefaultVault {
+		return ErrDefaultVault
+	}
+	if err := m.requireVault(name); err != nil {
+		return err
+	}
+
+	svc := ServiceName(name)
+	keys, err := m.KC.List(svc)
+	if err != nil {
+		return fmt.Errorf("vault: list keys for %q: %w", name, err)
+	}
+
+	if len(keys) > 0 && !force {
+		return fmt.Errorf("Vault has %d keys. Delete them first or use --force.", len(keys))
+	}
+
+	for _, k := range keys {
+		if err := m.KC.Delete(svc, k); err != nil {
+			return fmt.Errorf("vault: delete key %q from %q: %w", k, name, err)
+		}
+	}
+
+	vaults, err := m.ListVaults()
+	if err != nil {
+		return err
+	}
+	filtered := make([]string, 0, len(vaults)-1)
+	for _, v := range vaults {
+		if v != name {
+			filtered = append(filtered, v)
+		}
+	}
+	if err := m.writeVaults(filtered); err != nil {
+		return err
+	}
+
+	if m.ActiveVault() == name {
+		return m.Switch(DefaultVault)
+	}
+	return nil
+}
+
+// --- Helpers ---
 
 // Get retrieves a secret from the specified vault (or active vault if empty).
 func (m *Manager) Get(key, vaultName string) (string, error) {

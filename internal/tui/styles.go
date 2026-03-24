@@ -6,6 +6,8 @@ type styles struct {
 	app          lipgloss.Style
 	header       lipgloss.Style
 	subtle       lipgloss.Style
+	success      lipgloss.Style
+	warning      lipgloss.Style
 	preview      lipgloss.Style
 	previewTitle lipgloss.Style
 	status       lipgloss.Style
@@ -41,6 +43,8 @@ func newStyles() styles {
 		app:          lipgloss.NewStyle().Padding(1, 2),
 		header:       lipgloss.NewStyle().Bold(true).Foreground(chiefsGold).Background(chiefsDark).Padding(0, 1),
 		subtle:       lipgloss.NewStyle().Foreground(muted),
+		success:      lipgloss.NewStyle().Foreground(lipgloss.Color("#4CAF50")).Bold(true),
+		warning:      lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB81C")).Bold(true),
 		preview:      lipgloss.NewStyle().Border(lipgloss.RoundedBorder(), false, true, true, true).BorderForeground(chiefsGold).Padding(1, 2),
 		previewTitle: lipgloss.NewStyle().Foreground(chiefsGold).Bold(true),
 		status:       lipgloss.NewStyle().Foreground(chiefsGold).Background(chiefsDark).Padding(0, 1),

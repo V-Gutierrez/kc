@@ -8,9 +8,10 @@ import (
 
 func newInitCmd(app *App) *cobra.Command {
 	return &cobra.Command{
-		Use:   "init SHELL",
-		Short: "Print the shell snippet needed to load kc secrets on startup",
-		Args:  cobra.ExactArgs(1),
+		Use:       "init SHELL",
+		Short:     "Print the shell snippet needed to load kc secrets on startup",
+		Args:      cobra.ExactArgs(1),
+		ValidArgs: []string{"zsh", "bash", "fish"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			shell, err := normalizeShell(args[0])
 			if err != nil {

@@ -33,10 +33,11 @@ func (interactiveTestBulk) ReadRawService(service string) (map[string]string, er
 
 type interactiveTestVaults struct{}
 
-func (interactiveTestVaults) List() ([]string, error)  { return []string{"default"}, nil }
-func (interactiveTestVaults) Create(name string) error { return nil }
-func (interactiveTestVaults) Active() (string, error)  { return "default", nil }
-func (interactiveTestVaults) Switch(name string) error { return nil }
+func (interactiveTestVaults) List() ([]string, error)              { return []string{"default"}, nil }
+func (interactiveTestVaults) Create(name string) error             { return nil }
+func (interactiveTestVaults) Delete(name string, force bool) error { return nil }
+func (interactiveTestVaults) Active() (string, error)              { return "default", nil }
+func (interactiveTestVaults) Switch(name string) error             { return nil }
 
 type interactiveTestClipboard struct{}
 

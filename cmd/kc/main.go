@@ -102,6 +102,10 @@ func (v *vaultAdapter) Switch(name string) error {
 	return v.vm.Switch(name)
 }
 
+func (v *vaultAdapter) Delete(name string, force bool) error {
+	return v.vm.DeleteVault(name, force)
+}
+
 // bulkAdapter bridges vault.Manager to the cli.BulkStore interface.
 type bulkAdapter struct {
 	vm *vault.Manager

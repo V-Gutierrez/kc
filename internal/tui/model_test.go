@@ -400,8 +400,17 @@ func TestHandleFormKeyEnterSubmits(t *testing.T) {
 
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := updated.(Model)
+	if cmd != nil {
+		t.Fatal("expected nil command on first Enter (confirmation step)")
+	}
+	if !model.form.confirming {
+		t.Fatal("expected confirming state")
+	}
+
+	updated, cmd = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(Model)
 	if cmd == nil {
-		t.Fatal("expected save command")
+		t.Fatal("expected save command on second Enter")
 	}
 	msg := cmd()
 	updated, _ = model.Update(msg)

@@ -17,6 +17,7 @@ func newVaultCmd(app *App) *cobra.Command {
 		newVaultListCmd(app),
 		newVaultCreateCmd(app),
 		newVaultSwitchCmd(app),
+		newVaultDeleteCmd(app),
 	)
 
 	return vaultCmd
@@ -89,4 +90,30 @@ func newVaultSwitchCmd(app *App) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newVaultDeleteCmd(app *App) *cobra.Command {
+	var force bool
+	cmd := &cobra.Command{
+		Use:     "delete NAME",
+		Aliases: []string{"rm"},
+		Short:   "Delete a vault",
+		Args:    cobra.ExactArgs(1),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if len(args) != 0 {
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+			return completeVaults(app, toComplete)
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			if err := app.Vaults.Delete(name, force); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Deleted vault %q.\n", name)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&force, "force", false, "delete vault even if it contains keys")
+	return cmd
 }
