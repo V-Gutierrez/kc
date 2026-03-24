@@ -28,7 +28,7 @@
 ---
 
 <p align="center">
-  <img src="assets/tui-screenshot.jpg" alt="kc interactive TUI" width="700" />
+  <img src="assets/demo.gif" alt="kc demo" width="700" />
 </p>
 
 ---
