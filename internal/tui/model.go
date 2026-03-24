@@ -444,7 +444,7 @@ func (m Model) handleFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.focusForm()
 		return m, nil
 	}
-	if msg.String() == "ctrl+r" && m.form.focus == 2 {
+	if msg.String() == "f2" && m.form.focus == 2 {
 		if m.form.value.EchoMode == textinput.EchoPassword {
 			m.form.value.EchoMode = textinput.EchoNormal
 		} else {
@@ -455,6 +455,12 @@ func (m Model) handleFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == " " && m.form.focus == 3 {
 		m.form.isProtected = !m.form.isProtected
 		return m, nil
+	}
+	if m.form.focus == 0 && strings.TrimSpace(m.form.vault.Value()) == "" {
+		if vault, ok := m.quickSelectVault(msg.String()); ok {
+			m.form.vault.SetValue(vault)
+			return m, nil
+		}
 	}
 
 	var cmd tea.Cmd
@@ -616,6 +622,7 @@ func (m *Model) focusForm() {
 	m.form.vault.Blur()
 	m.form.key.Blur()
 	m.form.value.Blur()
+	m.applyFormInputStyles()
 	switch m.form.focus {
 	case 0:
 		m.form.vault.Focus()
@@ -628,7 +635,10 @@ func (m *Model) focusForm() {
 
 func newFormState(vault, keyName, value string) formState {
 	vaultInput := textinput.New()
-	vaultInput.SetValue(vault)
+	vaultInput.Placeholder = vault
+	if keyName != "" {
+		vaultInput.SetValue(vault)
+	}
 	vaultInput.Prompt = "vault> "
 	keyInput := textinput.New()
 	keyInput.SetValue(keyName)
@@ -661,6 +671,47 @@ func newFormState(vault, keyName, value string) formState {
 		form.vault.Focus()
 	}
 	return form
+}
+
+func (m *Model) applyFormInputStyles() {
+	focusedPrompt := m.styles.focusedLabel
+	blurredPrompt := m.styles.inactiveLabel
+	focusedText := m.styles.normal
+	blurredText := m.styles.subtle
+
+	m.form.vault.PromptStyle = blurredPrompt
+	m.form.vault.TextStyle = blurredText
+	m.form.vault.PlaceholderStyle = m.styles.subtle
+	m.form.key.PromptStyle = blurredPrompt
+	m.form.key.TextStyle = blurredText
+	m.form.key.PlaceholderStyle = m.styles.subtle
+	m.form.value.PromptStyle = blurredPrompt
+	m.form.value.TextStyle = blurredText
+	m.form.value.PlaceholderStyle = m.styles.subtle
+
+	switch m.form.focus {
+	case 0:
+		m.form.vault.PromptStyle = focusedPrompt
+		m.form.vault.TextStyle = focusedText
+	case 1:
+		m.form.key.PromptStyle = focusedPrompt
+		m.form.key.TextStyle = focusedText
+	case 2:
+		m.form.value.PromptStyle = focusedPrompt
+		m.form.value.TextStyle = focusedText
+	}
+}
+
+func (m Model) quickSelectVault(input string) (string, bool) {
+	if len(input) != 1 || input[0] < '1' || input[0] > '9' {
+		return "", false
+	}
+	index := int(input[0] - '1')
+	vaults := m.vaultHints()
+	if index < 0 || index >= len(vaults) {
+		return "", false
+	}
+	return vaults[index], true
 }
 
 func loadEntriesCmd(deps Deps) tea.Cmd {
@@ -881,10 +932,7 @@ func (m Model) overlayView() string {
 		vaultHint = m.styles.success.Render("existing vault")
 	}
 	vaultNames := m.vaultHints()
-	vaultList := ""
-	if len(vaultNames) > 0 {
-		vaultList = m.styles.subtle.Render("Vaults: " + strings.Join(vaultNames, ", "))
-	}
+	vaultList := m.vaultListView(vaultNames)
 
 	keyVal := strings.TrimSpace(m.form.key.Value())
 	keyNamingHint := m.styles.subtle.Render("Use UPPER_SNAKE_CASE")
@@ -906,24 +954,51 @@ func (m Model) overlayView() string {
 	content := []string{
 		m.styles.header.Render(title),
 		"",
-		m.styles.inputLabel.Render("Vault"),
+		m.formLabel("Vault", 0),
 		m.form.vault.View(),
 		vaultList,
 		vaultHint,
 		"",
-		m.styles.inputLabel.Render("Key"),
+		m.formLabel("Key", 1),
 		m.form.key.View(),
 		keyNamingHint,
 		keyWarning,
 		"",
-		m.styles.inputLabel.Render("Value") + m.styles.subtle.Render(" (Ctrl+R reveal/hide)"),
+		m.formLabel("Value", 2) + m.styles.subtle.Render(" (F2 to reveal)"),
 		m.form.value.View(),
 		"",
 		protStyle.Render(protChecked+"Touch ID protected") + m.styles.subtle.Render(" (Space toggle)"),
 		"",
-		m.styles.help.Render("Enter save • Esc cancel • Tab next field"),
+		m.styles.activeHelp.Render("Tab: next field | Esc: cancel | Enter: confirm"),
 	}
 	return m.styles.overlay.Render(strings.Join(content, "\n"))
+}
+
+func (m Model) formLabel(label string, focus int) string {
+	if m.form.focus == focus {
+		return m.styles.focusedLabel.Render("→ " + label)
+	}
+	return m.styles.inactiveLabel.Render(label)
+}
+
+func (m Model) vaultListView(vaultNames []string) string {
+	if len(vaultNames) == 0 || m.form.focus != 0 {
+		return ""
+	}
+
+	lines := make([]string, 0, len(vaultNames)+1)
+	lines = append(lines, m.styles.activeHelp.Render("Available vaults:"))
+	for i, vault := range vaultNames {
+		if i >= 9 {
+			break
+		}
+		option := m.styles.vaultOption.Render(fmt.Sprintf("%d. %s", i+1, vault))
+		if vault == m.activeVault {
+			option = m.styles.vaultDefault.Render(fmt.Sprintf("%d. %s (default)", i+1, vault))
+		}
+		lines = append(lines, option)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m Model) helpView() string {
