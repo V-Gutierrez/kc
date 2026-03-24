@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -31,8 +32,11 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 		titleStyle = d.styles.selected
 	}
 
+	prefix := item.prefix()
+	prefixLabel := d.styles.Prefix(prefix).Render(strings.ToUpper(prefix))
+
 	masked := d.styles.masked.Render(maskedValue(item, d.model.preview))
-	line1 := titleStyle.Render(item.Key)
+	line1 := prefixLabel + " " + titleStyle.Render(item.Key)
 	line2 := d.styles.vault.Render(item.Vault) + "  " + masked
 	row := line1 + "\n" + line2
 	if index%2 == 1 && index != m.Index() {

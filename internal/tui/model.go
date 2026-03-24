@@ -16,12 +16,30 @@ import (
 
 const allVaultsLabel = "All vaults"
 
+const (
+	protectionProtected   = "protected"
+	protectionUnprotected = "unprotected"
+	kcBanner              = `    ██╗  ██╗ ██████╗
+    ██║ ██╔╝██╔════╝
+    █████╔╝ ██║     
+    ██╔═██╗ ██║     
+    ██║  ██╗╚██████╗
+    ╚═╝  ╚═╝ ╚═════╝`
+)
+
+type SecretMetadata struct {
+	Key        string
+	Vault      string
+	Protection string
+}
+
 type Store interface {
 	Get(vault, key string) (string, error)
 	Set(vault, key, value string) error
 	SetWithProtection(vault, key, value string, protected bool) error
 	Delete(vault, key string) error
 	List(vault string) ([]string, error)
+	ListMetadata(vault string) ([]SecretMetadata, error)
 }
 
 type Vaults interface {
@@ -42,12 +60,17 @@ type Deps struct {
 }
 
 type entry struct {
-	Vault string
-	Key   string
+	Vault      string
+	Key        string
+	Protection string
 }
 
 func (e entry) FilterValue() string {
 	return strings.ToLower(e.Key)
+}
+
+func (e entry) prefix() string {
+	return prefixOf(e.Key)
 }
 
 type mode int
@@ -91,6 +114,10 @@ type copiedMsg struct {
 	value string
 }
 
+type clearFlashMsg struct {
+	token int
+}
+
 type savedMsg struct {
 	entry entry
 	value string
@@ -122,6 +149,8 @@ type Model struct {
 	form          formState
 	loading       bool
 	status        string
+	flashMessage  string
+	flashToken    int
 	err           error
 	width         int
 	height        int
@@ -201,7 +230,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case copiedMsg:
-		m.status = fmt.Sprintf("Copied %s from %s", msg.entry.Key, msg.entry.Vault)
+		m.flashToken++
+		m.flashMessage = "✓ Copied to clipboard, auto-clears in 30s"
+		return m, tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
+			return clearFlashMsg{token: m.flashToken}
+		})
+	case clearFlashMsg:
+		if msg.token == m.flashToken {
+			m.flashMessage = ""
+		}
 		return m, nil
 	case savedMsg:
 		m.upsertEntry(msg.entry)
@@ -232,7 +269,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	if m.loading {
-		return m.styles.app.Render(m.styles.header.Render("kc") + "\n\nLoading vaults and keys...")
+		banner := m.styles.banner.Render(kcBanner)
+		content := lipgloss.JoinVertical(
+			lipgloss.Center,
+			banner,
+			"",
+			m.styles.loading.Render("Loading vaults and keys..."),
+		)
+		width := max(m.width, 80)
+		height := max(m.height, 24)
+		return m.styles.app.Render(lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, content))
+	}
+
+	if len(m.entries) == 0 && m.err == nil {
+		return m.welcomeView()
 	}
 
 	left := lipgloss.JoinVertical(lipgloss.Left,
@@ -257,6 +307,9 @@ func (m Model) View() string {
 }
 
 func (m Model) statusView() string {
+	if m.flashMessage != "" {
+		return m.styles.flash.Render(m.flashMessage)
+	}
 	status := m.status
 	if status == "" {
 		status = "Ready"
@@ -406,7 +459,7 @@ func (m Model) submitForm() (Model, tea.Cmd) {
 	if vault == "" {
 		vault = m.activeVault
 	}
-	entry := entry{Vault: vault, Key: keyName}
+	entry := entry{Vault: vault, Key: keyName, Protection: protectionProtected}
 	return m, saveCmd(m.deps, entry, value)
 }
 
@@ -419,6 +472,18 @@ func (m *Model) applyFilters() {
 		}
 		items = append(items, item)
 	}
+
+	sort.SliceStable(items, func(i, j int) bool {
+		leftPrefix := items[i].prefix()
+		rightPrefix := items[j].prefix()
+		if leftPrefix != rightPrefix {
+			return leftPrefix < rightPrefix
+		}
+		if items[i].Key != items[j].Key {
+			return items[i].Key < items[j].Key
+		}
+		return items[i].Vault < items[j].Vault
+	})
 
 	query := strings.TrimSpace(m.search.Value())
 	if query != "" {
@@ -574,13 +639,19 @@ func loadEntriesCmd(deps Deps) tea.Cmd {
 		}
 		items := make([]entry, 0)
 		for _, vault := range vaults {
-			keys, err := deps.Store.List(vault)
+			metas, err := deps.Store.ListMetadata(vault)
 			if err != nil {
 				return loadedMsg{err: err}
 			}
-			sort.Strings(keys)
-			for _, key := range keys {
-				items = append(items, entry{Vault: vault, Key: key})
+			sort.Slice(metas, func(i, j int) bool {
+				return metas[i].Key < metas[j].Key
+			})
+			for _, m := range metas {
+				protection := m.Protection
+				if protection == "" {
+					protection = protectionProtected
+				}
+				items = append(items, entry{Vault: vault, Key: m.Key, Protection: protection})
 			}
 		}
 		return loadedMsg{vaults: vaults, activeVault: active, items: items}
@@ -628,6 +699,7 @@ func saveCmd(deps Deps, item entry, value string) tea.Cmd {
 		if err := deps.Store.SetWithProtection(item.Vault, item.Key, value, true); err != nil {
 			return errMsg{err: err}
 		}
+		item.Protection = protectionProtected
 		return savedMsg{entry: item, value: value}
 	}
 }
@@ -653,15 +725,16 @@ func maskedValue(item entry, preview previewState) string {
 }
 
 func (m Model) headerView() string {
-	filter := m.currentFilter
-	if filter == "" {
-		filter = allVaultsLabel
+	vault := m.currentFilter
+	if vault == allVaultsLabel {
+		vault = m.activeVault
 	}
 	count := len(m.list.Items())
-	return lipgloss.JoinVertical(lipgloss.Left,
-		m.styles.header.Render("kc interactive"),
-		m.styles.subtle.Render(fmt.Sprintf("Vault filter: %s • Active vault: %s • (%d items)", filter, m.activeVault, count)),
-	)
+	label := "keys"
+	if count == 1 {
+		label = "key"
+	}
+	return m.styles.header.Render(fmt.Sprintf("🔒 kc • vault: %s • %d %s", vault, count, label))
 }
 
 func (m Model) searchView() string {
@@ -677,12 +750,20 @@ func (m Model) searchView() string {
 }
 
 func (m Model) previewView() string {
-	lines := []string{m.styles.header.Render("Preview")}
+	lines := []string{chiefsBorder(max(18, m.width/2-10), m.styles), m.styles.header.Render("Preview")}
 	if item, ok := m.selectedEntry(); ok {
+		protection := protectionLabel(item.Protection)
 		lines = append(lines,
-			m.styles.subtle.Render("Vault: "+item.Vault),
-			m.styles.subtle.Render("Key: "+item.Key),
+			m.styles.subtle.Render("Key"),
+			m.styles.previewTitle.Render(item.Key),
 			"",
+			m.styles.subtle.Render("Vault"),
+			m.styles.normal.Render(item.Vault),
+			"",
+			m.styles.subtle.Render("Protection status"),
+			m.styles.normal.Render(protection),
+			"",
+			m.styles.subtle.Render("Value"),
 			m.styles.revealed.Render(maskedValue(item, m.preview)),
 		)
 	} else {
@@ -730,6 +811,55 @@ func (m Model) helpView() string {
 		parts = append(parts, help.Key+" "+help.Desc)
 	}
 	return m.styles.help.Render(strings.Join(parts, " • "))
+}
+
+func (m Model) welcomeView() string {
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.styles.welcomeTitle.Render("No secrets yet! Get started:"),
+		"",
+		"  "+m.styles.welcomeKey.Render("kc set API_KEY")+"        "+m.styles.welcomeDesc.Render("Store a secret (Touch ID protected)"),
+		"  "+m.styles.welcomeKey.Render("kc import .env")+"        "+m.styles.welcomeDesc.Render("Import from .env file"),
+		"  "+m.styles.welcomeKey.Render("kc setup")+"              "+m.styles.welcomeDesc.Render("Migrate from your shell config"),
+		"",
+		m.styles.subtle.Render("Or press `a` to add a secret right here."),
+	)
+	return m.styles.app.Render(lipgloss.Place(max(m.width, 80), max(m.height, 24), lipgloss.Center, lipgloss.Center, m.styles.welcome.Render(content)))
+}
+
+func prefixOf(key string) string {
+	idx := strings.Index(key, "_")
+	if idx > 0 {
+		return strings.ToLower(key[:idx])
+	}
+	return "other"
+}
+
+func protectionLabel(protection string) string {
+	switch strings.ToLower(strings.TrimSpace(protection)) {
+	case protectionUnprotected:
+		return "🔓 Unprotected"
+	case protectionProtected, "":
+		return "🔐 Protected"
+	default:
+		return "🔐 Protected"
+	}
+}
+
+func chiefsBorder(width int, styles styles) string {
+	if width < 6 {
+		width = 6
+	}
+	var b strings.Builder
+	for i := 0; i < width; i++ {
+		segment := "━"
+		if i%2 == 0 {
+			b.WriteString(styles.borderRed.Render(segment))
+			continue
+		}
+		b.WriteString(styles.borderGold.Render(segment))
+	}
+	return b.String()
 }
 
 func max(a, b int) int {

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,6 +11,7 @@ import (
 type mockStore struct {
 	keys     map[string][]string
 	values   map[string]map[string]string
+	metadata map[string]map[string]string
 	listErr  error
 	getCalls []storeCall
 	setCalls []setCall
@@ -30,8 +32,9 @@ type setCall struct {
 
 func newMockStore() *mockStore {
 	return &mockStore{
-		keys:   make(map[string][]string),
-		values: make(map[string]map[string]string),
+		keys:     make(map[string][]string),
+		values:   make(map[string]map[string]string),
+		metadata: make(map[string]map[string]string),
 	}
 }
 
@@ -49,7 +52,15 @@ func (m *mockStore) SetWithProtection(vault, key, value string, protected bool) 
 	if m.values[vault] == nil {
 		m.values[vault] = make(map[string]string)
 	}
+	if m.metadata[vault] == nil {
+		m.metadata[vault] = make(map[string]string)
+	}
 	m.values[vault][key] = value
+	if protected {
+		m.metadata[vault][key] = protectionProtected
+	} else {
+		m.metadata[vault][key] = protectionUnprotected
+	}
 	m.ensureKey(vault, key)
 	return nil
 }
@@ -58,6 +69,9 @@ func (m *mockStore) Delete(vault, key string) error {
 	m.delCalls = append(m.delCalls, storeCall{vault: vault, key: key})
 	if m.values[vault] != nil {
 		delete(m.values[vault], key)
+	}
+	if m.metadata[vault] != nil {
+		delete(m.metadata[vault], key)
 	}
 	keys := m.keys[vault][:0]
 	for _, existing := range m.keys[vault] {
@@ -75,6 +89,22 @@ func (m *mockStore) List(vault string) ([]string, error) {
 	}
 	keys := append([]string(nil), m.keys[vault]...)
 	return keys, nil
+}
+
+func (m *mockStore) ListMetadata(vault string) ([]SecretMetadata, error) {
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	keys := m.keys[vault]
+	metas := make([]SecretMetadata, len(keys))
+	for i, key := range keys {
+		protection := m.metadata[vault][key]
+		if protection == "" {
+			protection = protectionProtected
+		}
+		metas[i] = SecretMetadata{Key: key, Vault: vault, Protection: protection}
+	}
+	return metas, nil
 }
 
 func (m *mockStore) ensureKey(vault, key string) {
@@ -108,8 +138,10 @@ func TestModelInitLoadsMetadataWithoutSecretReads(t *testing.T) {
 	store := newMockStore()
 	store.keys["default"] = []string{"API_KEY"}
 	store.values["default"] = map[string]string{"API_KEY": "secret-default"}
+	store.metadata["default"] = map[string]string{"API_KEY": protectionProtected}
 	store.keys["prod"] = []string{"API_KEY"}
 	store.values["prod"] = map[string]string{"API_KEY": "secret-prod"}
+	store.metadata["prod"] = map[string]string{"API_KEY": protectionUnprotected}
 
 	m := NewModel(Deps{
 		Store:         store,
@@ -137,6 +169,9 @@ func TestModelInitLoadsMetadataWithoutSecretReads(t *testing.T) {
 	}
 	if loaded.activeVault != "default" {
 		t.Fatalf("active vault = %q, want default", loaded.activeVault)
+	}
+	if loaded.items[1].Protection != protectionUnprotected {
+		t.Fatalf("protection = %q, want %q", loaded.items[1].Protection, protectionUnprotected)
 	}
 }
 
@@ -409,8 +444,8 @@ func TestCopyCmd(t *testing.T) {
 	if clipboard.values[0] != "secret" {
 		t.Fatalf("clipboard = %#v, want secret", clipboard.values)
 	}
-	if model.status == "" {
-		t.Fatal("expected status message")
+	if model.flashMessage == "" {
+		t.Fatal("expected flash message")
 	}
 }
 
@@ -425,5 +460,70 @@ func TestMaskedValueRevealedEmpty(t *testing.T) {
 	got := maskedValue(entry{Vault: "default", Key: "TOKEN"}, previewState{vault: "default", key: "TOKEN", value: "   ", revealed: true})
 	if got != "[empty]" {
 		t.Fatalf("maskedValue = %q, want [empty]", got)
+	}
+}
+
+func TestCopyFlashMessageBehavior(t *testing.T) {
+	store := newMockStore()
+	store.keys["v"] = []string{"k"}
+	store.values["v"] = map[string]string{"k": "secret"}
+	m := NewModel(Deps{Store: store, Clipboard: &mockClipboard{}})
+	updated, _ := m.Update(loadedMsg{
+		items:       []entry{{Vault: "v", Key: "k"}},
+		activeVault: "v",
+	})
+	model := updated.(Model)
+	model.list.Select(0)
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	model = updated.(Model)
+
+	if cmd == nil {
+		t.Fatal("expected copy command")
+	}
+
+	msg := cmd()
+	updated, cmd = model.Update(msg)
+	model = updated.(Model)
+
+	if !strings.Contains(model.flashMessage, "Copied to clipboard") {
+		t.Errorf("expected flash message containing 'Copied to clipboard', got %q", model.flashMessage)
+	}
+	if cmd == nil {
+		t.Fatal("expected tick command")
+	}
+
+	updated, _ = model.Update(clearFlashMsg{token: model.flashToken})
+	model = updated.(Model)
+
+	if model.flashMessage != "" {
+		t.Errorf("expected flash message to clear, got %q", model.flashMessage)
+	}
+}
+
+func TestPrefixOf(t *testing.T) {
+	tests := []struct {
+		key  string
+		want string
+	}{
+		{key: "AWS_ACCESS_KEY", want: "aws"},
+		{key: "NOTION_TOKEN", want: "notion"},
+		{key: "TOKEN", want: "other"},
+		{key: "_HIDDEN", want: "other"},
+	}
+
+	for _, tt := range tests {
+		if got := prefixOf(tt.key); got != tt.want {
+			t.Fatalf("prefixOf(%q) = %q, want %q", tt.key, got, tt.want)
+		}
+	}
+}
+
+func TestProtectionLabel(t *testing.T) {
+	if got := protectionLabel(protectionProtected); got != "🔐 Protected" {
+		t.Fatalf("protectionLabel(protected) = %q", got)
+	}
+	if got := protectionLabel(protectionUnprotected); got != "🔓 Unprotected" {
+		t.Fatalf("protectionLabel(unprotected) = %q", got)
 	}
 }

@@ -25,8 +25,21 @@ func TestHeaderViewChecks(t *testing.T) {
 	if !strings.Contains(output, "default") {
 		t.Errorf("Header missing vault name 'default', got: %q", output)
 	}
-	if !strings.Contains(output, "(2 items)") {
-		t.Errorf("Header missing item count '(2 items)', got: %q", output)
+	if !strings.Contains(output, "2 keys") {
+		t.Errorf("Header missing item count '2 keys', got: %q", output)
+	}
+}
+
+func TestLoadingViewShowsBannerAndSubtitle(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.width = 80
+	m.height = 24
+	output := m.View()
+	if !strings.Contains(output, "██╗  ██╗") {
+		t.Fatalf("loading view missing ASCII banner, got: %q", output)
+	}
+	if !strings.Contains(output, "Loading vaults and keys...") {
+		t.Fatalf("loading view missing subtitle, got: %q", output)
 	}
 }
 
@@ -125,11 +138,43 @@ func TestStatusViewDefault(t *testing.T) {
 
 func TestPreviewViewShowsSelectedEntry(t *testing.T) {
 	m := NewModel(Deps{Store: newMockStore()})
-	m.entries = []entry{{Vault: "default", Key: "TOKEN"}}
+	m.entries = []entry{{Vault: "default", Key: "TOKEN", Protection: protectionProtected}}
 	m.applyFilters()
 	output := m.previewView()
 	if !strings.Contains(output, "TOKEN") {
 		t.Fatalf("previewView = %q, want selected key", output)
+	}
+	if !strings.Contains(output, "🔐 Protected") {
+		t.Fatalf("previewView = %q, want protection metadata", output)
+	}
+}
+
+func TestEmptyVaultWelcomeMatchesRequestedCopy(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.loading = false
+	m.width = 80
+	m.height = 24
+	output := m.View()
+	for _, want := range []string{
+		"No secrets yet! Get started:",
+		"kc set API_KEY",
+		"Store a secret (Touch ID protected)",
+		"kc import .env",
+		"Import from .env file",
+		"kc setup",
+		"Migrate from your shell config",
+		"Or press `a` to add a secret right here.",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("welcome view missing %q in %q", want, output)
+		}
+	}
+}
+
+func TestChiefsBorderContainsStripeCharacters(t *testing.T) {
+	border := chiefsBorder(8, newStyles())
+	if strings.Count(border, "━") != 8 {
+		t.Fatalf("chiefsBorder() = %q, want 8 stripe characters", border)
 	}
 }
 
