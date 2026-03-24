@@ -183,6 +183,11 @@ func detectSecretsFromContent(content, shell string) []detectedSecret {
 			continue
 		}
 
+		// Skip shell aliases and functions — not secrets
+		if strings.HasPrefix(trimmed, "alias ") || strings.HasPrefix(trimmed, "function ") {
+			continue
+		}
+
 		var key, value string
 		var ok bool
 		if shell == shellFish {
