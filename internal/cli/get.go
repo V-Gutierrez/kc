@@ -5,10 +5,11 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/v-gutierrez/kc/internal/output"
 )
 
 func newGetCmd(app *App) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "get KEY",
 		Short: "Read a secret from the keychain",
 		Long:  "Retrieves the value for KEY from the active vault (or --vault) and copies it to the clipboard.",
@@ -31,6 +32,11 @@ func newGetCmd(app *App) *cobra.Command {
 				return fmt.Errorf("failed to get %q from vault %q: %w", key, vault, err)
 			}
 
+			jsonOutput, _ := cmd.Flags().GetBool("json")
+			if jsonOutput {
+				return output.WriteJSON(cmd.OutOrStdout(), output.GetResult(key, value, vault))
+			}
+
 			// Copy to clipboard if available.
 			if app.Clipboard != nil {
 				if copyErr := app.Clipboard.Copy(value); copyErr != nil {
@@ -44,6 +50,8 @@ func newGetCmd(app *App) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().Bool("json", false, "output structured JSON")
+	return cmd
 }
 
 func maskValue(value string) string {
