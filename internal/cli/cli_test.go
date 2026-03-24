@@ -159,7 +159,7 @@ func (a *countingAuthorizer) Authorize(reason string) error {
 	return a.err
 }
 
-func (*countingAuthorizer) bootSessionEnabled() bool {
+func (*countingAuthorizer) bootSessionEnabled() bool { //nolint:unused // implements auth.bootCapable interface
 	return false
 }
 
