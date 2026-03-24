@@ -39,7 +39,19 @@ func newListCmd(app *App) *cobra.Command {
 					return fmt.Errorf("list: --show-values requires bulk store support")
 				}
 
-				session := authSession(app)
+				requiresAuth := false
+				for _, item := range metadataByKey {
+					if item.Protection == ProtectionProtected {
+						requiresAuth = true
+						break
+					}
+				}
+				if requiresAuth {
+					session := authSession(app)
+					if err := session.Authorize("Unlock kc secrets"); err != nil {
+						return err
+					}
+				}
 				entries, err := app.Bulk.GetAll(vault)
 				if err != nil {
 					return fmt.Errorf("failed to list keys in vault %q: %w", vault, err)
@@ -49,11 +61,6 @@ func newListCmd(app *App) *cobra.Command {
 					item := metadataByKey[key]
 					if protectedOnly && item.Protection != ProtectionProtected {
 						continue
-					}
-					if item.Protection == ProtectionProtected {
-						if err := session.Authorize("Unlock kc secrets"); err != nil {
-							return err
-						}
 					}
 					filtered[key] = value
 				}

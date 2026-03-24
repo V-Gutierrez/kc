@@ -19,6 +19,19 @@ func newExportCmd(app *App) *cobra.Command {
 				return err
 			}
 			outPath, _ := cmd.Flags().GetString("output")
+			metadata, err := app.Store.ListMetadata(vault)
+			if err != nil {
+				return fmt.Errorf("export: %w", err)
+			}
+			for _, item := range metadata {
+				if item.Protection == ProtectionProtected {
+					session := authSession(app)
+					if err := session.Authorize("Unlock kc secrets"); err != nil {
+						return err
+					}
+					break
+				}
+			}
 
 			entries, err := app.Bulk.GetAll(vault)
 			if err != nil {

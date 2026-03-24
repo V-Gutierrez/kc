@@ -149,6 +149,20 @@ type mockClipboard struct {
 	last string
 }
 
+type countingAuthorizer struct {
+	calls int
+	err   error
+}
+
+func (a *countingAuthorizer) Authorize(reason string) error {
+	a.calls++
+	return a.err
+}
+
+func (*countingAuthorizer) bootSessionEnabled() bool {
+	return false
+}
+
 func (m *mockClipboard) Copy(value string) error {
 	m.last = value
 	return nil
@@ -629,6 +643,13 @@ func newTestAppWithBulk() (*cli.App, *mockStore, *mockBulkStore, *mockVaultManag
 	return app, store, bulk, vaults
 }
 
+func newAuthorizedTestAppWithBulk() (*cli.App, *mockStore, *mockBulkStore, *mockVaultManager, *countingAuthorizer) {
+	app, store, bulk, vaults := newTestAppWithBulk()
+	authorizer := &countingAuthorizer{}
+	app.Auth = authorizer
+	return app, store, bulk, vaults, authorizer
+}
+
 func TestImportDotEnv_ActiveVault(t *testing.T) {
 	app, store, _, _ := newTestAppWithBulk()
 
@@ -902,6 +923,119 @@ func TestExport_QuotesValuesNeedingEnvEscaping(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "APOSTROPHE=\"O'Reilly\"") {
 		t.Errorf("stdout = %q, want apostrophe-safe dotenv quoting", stdout)
+	}
+}
+
+func TestExport_ProtectedVaultAuthorizesBeforeExport(t *testing.T) {
+	app, store, _, _, authorizer := newAuthorizedTestAppWithBulk()
+	if err := store.SetWithProtection("default", "SECRET", "s3cr3t", true); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, err := executeCmd(app, "export")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if authorizer.calls != 1 {
+		t.Fatalf("authorizer calls = %d, want 1", authorizer.calls)
+	}
+	if !strings.Contains(stdout, "SECRET=s3cr3t") {
+		t.Fatalf("stdout = %q, want exported secret", stdout)
+	}
+	if strings.Contains(stdout, "authentication failed") {
+		t.Fatalf("stdout = %q, should not leak auth errors", stdout)
+	}
+	if !strings.HasSuffix(stdout, "\n") {
+		t.Fatalf("stdout = %q, want trailing newline", stdout)
+	}
+	if authorizer.calls != 1 {
+		t.Fatalf("authorizer calls after export = %d, want 1", authorizer.calls)
+	}
+	if app.Auth == nil {
+		t.Fatal("app.Auth should remain configured")
+	}
+}
+
+func TestExport_ProtectedVaultReturnsErrorBeforeWritingFile(t *testing.T) {
+	app, store, _, _, authorizer := newAuthorizedTestAppWithBulk()
+	authorizer.err = fmt.Errorf("denied")
+	if err := store.SetWithProtection("default", "SECRET", "s3cr3t", true); err != nil {
+		t.Fatal(err)
+	}
+
+	outFile := filepath.Join(t.TempDir(), "out.env")
+	_, _, err := executeCmd(app, "export", "-o", outFile)
+	if err == nil {
+		t.Fatal("expected export error")
+	}
+	if authorizer.calls != 1 {
+		t.Fatalf("authorizer calls = %d, want 1", authorizer.calls)
+	}
+	if _, statErr := os.Stat(outFile); !os.IsNotExist(statErr) {
+		t.Fatalf("Stat error = %v, want not exist", statErr)
+	}
+}
+
+func TestEnv_ProtectedVaultAuthorizesBeforeReadingValues(t *testing.T) {
+	app, store, _, _, authorizer := newAuthorizedTestAppWithBulk()
+	if err := store.SetWithProtection("default", "PUBLIC", "value", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetWithProtection("default", "SECRET", "s3cr3t", true); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, err := executeCmd(app, "env")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if authorizer.calls != 1 {
+		t.Fatalf("authorizer calls = %d, want 1", authorizer.calls)
+	}
+	if !strings.Contains(stdout, "export PUBLIC=") || !strings.Contains(stdout, "export SECRET=") {
+		t.Fatalf("stdout = %q, want both exports", stdout)
+	}
+}
+
+func TestListShowValues_ProtectedVaultAuthorizesOnce(t *testing.T) {
+	app, store, _, _, authorizer := newAuthorizedTestAppWithBulk()
+	if err := store.SetWithProtection("default", "SECRET_A", "one", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetWithProtection("default", "SECRET_B", "two", true); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, err := executeCmd(app, "list", "--show-values")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if authorizer.calls != 1 {
+		t.Fatalf("authorizer calls = %d, want 1", authorizer.calls)
+	}
+	if !strings.Contains(stdout, "SECRET_A=one") || !strings.Contains(stdout, "SECRET_B=two") {
+		t.Fatalf("stdout = %q, want both values", stdout)
+	}
+}
+
+func TestSearchShowValues_ProtectedMatchAuthorizesOnce(t *testing.T) {
+	app, store, _, _, authorizer := newAuthorizedTestAppWithBulk()
+	if err := store.SetWithProtection("default", "MONGO_URL", "mongodb://default", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetWithProtection("default", "MONGO_PUBLIC", "mongodb://public", false); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, err := executeCmd(app, "search", "mongo", "--show-values")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if authorizer.calls != 1 {
+		t.Fatalf("authorizer calls = %d, want 1", authorizer.calls)
+	}
+	if !strings.Contains(stdout, "mongodb://default") || !strings.Contains(stdout, "mongodb://public") {
+		t.Fatalf("stdout = %q, want values in output", stdout)
 	}
 }
 

@@ -23,8 +23,6 @@ func newSearchCmd(app *App) *cobra.Command {
 			showValues, _ := cmd.Flags().GetBool("show-values")
 			query := strings.ToLower(strings.TrimSpace(args[0]))
 			results := make([]output.ListItem, 0)
-			session := authSession(app)
-			authorized := false
 
 			for _, vault := range vaults {
 				metadata, err := app.Store.ListMetadata(vault)
@@ -38,6 +36,19 @@ func newSearchCmd(app *App) *cobra.Command {
 				matches := fuzzy.Find(query, searchTargets)
 				values := map[string]string{}
 				if showValues && len(matches) > 0 {
+					requiresAuth := false
+					for _, match := range matches {
+						if metadata[match.Index].Protection == ProtectionProtected {
+							requiresAuth = true
+							break
+						}
+					}
+					if requiresAuth {
+						session := authSession(app)
+						if err := session.Authorize("Unlock kc secrets"); err != nil {
+							return err
+						}
+					}
 					values, err = app.Bulk.GetAll(vault)
 					if err != nil {
 						return fmt.Errorf("search: read values for vault %q: %w", vault, err)
@@ -47,12 +58,6 @@ func newSearchCmd(app *App) *cobra.Command {
 					item := metadata[match.Index]
 					result := output.ListItem{Key: item.Key, Vault: vault, Protection: item.Protection}
 					if showValues {
-						if item.Protection == ProtectionProtected && !authorized {
-							if err := session.Authorize("Unlock kc secrets"); err != nil {
-								return err
-							}
-							authorized = true
-						}
 						result.Value = values[item.Key]
 					}
 					results = append(results, result)

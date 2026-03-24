@@ -20,23 +20,24 @@ func newEnvCmd(app *App) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("env: %w", err)
 			}
-			protectedKeys := make(map[string]bool, len(metadata))
+			requiresAuth := false
 			for _, item := range metadata {
-				protectedKeys[item.Key] = item.Protection == ProtectionProtected
+				if item.Protection == ProtectionProtected {
+					requiresAuth = true
+					break
+				}
+			}
+			if requiresAuth {
+				session := authSession(app)
+				if err := session.Authorize("Unlock kc secrets"); err != nil {
+					return err
+				}
 			}
 			entries, err := app.Bulk.GetAll(vault)
 			if err != nil {
 				return fmt.Errorf("env: %w", err)
 			}
-			session := authSession(app)
-			authorized := false
 			for _, k := range sortedKeys(entries) {
-				if protectedKeys[k] && !authorized {
-					if err := session.Authorize("Unlock kc secrets"); err != nil {
-						return err
-					}
-					authorized = true
-				}
 				fmt.Fprintf(cmd.OutOrStdout(), "export %s=%s\n", k, shellQuote(entries[k]))
 			}
 			return nil
