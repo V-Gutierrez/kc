@@ -41,13 +41,13 @@ The native Keychain is the right solution, but the `security` command UX is host
 
 Your secrets never leave the Secure Enclave. Zero external dependencies. Zero network calls. Ever.
 
-## What's New in v0.3.0
+## What's New in v0.4.0
 
-- 🔐 **Touch ID protection (default on)** — all secrets require biometric authentication
+- 🔐 **Touch ID boot-session grace period** — the first successful unlock is cached until logout or restart
+- 📦 **Protected exports** — `kc export` now follows the same protected-read policy as other read commands
 - 🔍 **`kc search`** — fuzzy search across all vaults
 - 📊 **`kc diff`** — compare secrets across vaults
 - 📝 **`kc list --json`** — JSON output for scripting
-- 🔒 **Audit logging** — track who accessed what, when
 
 ## Install
 
@@ -61,7 +61,7 @@ Or build from source:
 ```bash
 git clone https://github.com/v-gutierrez/kc.git
 cd kc
-go build -ldflags "-X github.com/v-gutierrez/kc/internal/cli.Version=v0.3.0" -o kc ./cmd/kc
+go build -ldflags "-X github.com/v-gutierrez/kc/internal/cli.Version=v0.4.0" -o kc ./cmd/kc
 sudo mv kc /usr/local/bin/
 ```
 
@@ -128,7 +128,7 @@ kc search openai
 
 ## Touch ID
 
-**v0.3.0** introduces biometric protection as the default for all secrets. Every `kc set` stores the secret with Touch ID access control — requiring your fingerprint to read it back.
+**v0.4.0** keeps Touch ID protection on by default and adds a boot-session grace period for protected reads. After the first successful unlock, `kc` caches the current macOS boot session in `$TMPDIR`, so subsequent protected reads skip the prompt until you log out or restart.
 
 ```bash
 # Default: Touch ID required
@@ -137,15 +137,21 @@ kc set DB_PASSWORD "super-secret"
 # Opt out per key
 kc set PUBLIC_KEY "not-sensitive" --no-protect
 
-# kc env prompts Touch ID once, then unlocks all protected keys for the session
+# First protected read prompts Touch ID
+kc get DB_PASSWORD
+
+# Later protected reads skip the prompt until logout or restart
 eval "$(kc env)"
+
+# Export follows the same protected-read rule
+kc export > .env
 ```
 
 **Why this matters:**
 - Physical presence required — no remote exfiltration
 - Enterprise-grade audit trail (who touched what, when)
 - If Touch ID is unavailable, falls back to system password prompt
-- Zero friction in daily workflow — one fingerprint per shell session
+- Zero friction in daily workflow — one fingerprint per boot session
 
 ## Search
 
