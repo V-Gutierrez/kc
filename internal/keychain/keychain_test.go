@@ -85,11 +85,6 @@ func TestGet_NotFound(t *testing.T) {
 func TestSet_Success(t *testing.T) {
 	runner := &fakeRunner{
 		results: []fakeResult{
-			// Delete (existing) returns not-found — that's fine
-			{
-				Output: []byte("security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain.\n"),
-				Err:    errors.New("exit status 44"),
-			},
 			// Add succeeds
 			{Output: nil, Err: nil},
 		},
@@ -101,16 +96,27 @@ func TestSet_Success(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if len(runner.calls) != 2 {
-		t.Fatalf("expected 2 calls, got %d", len(runner.calls))
+	if len(runner.calls) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(runner.calls))
 	}
-	// First call is delete
-	if runner.calls[0].Args[0] != "delete-generic-password" {
-		t.Fatalf("first call should be delete, got %v", runner.calls[0].Args)
+	if runner.calls[0].Args[0] != "add-generic-password" {
+		t.Fatalf("call should be add, got %v", runner.calls[0].Args)
 	}
-	// Second call is add
-	if runner.calls[1].Args[0] != "add-generic-password" {
-		t.Fatalf("second call should be add, got %v", runner.calls[1].Args)
+	if fmt.Sprintf("%v", runner.calls[0].Args) != fmt.Sprintf("%v", []string{"add-generic-password", "-s", "kc:default", "-a", "API_KEY", "-w", "new-value", "-j", protectedComment, "-U"}) {
+		t.Fatalf("args = %v", runner.calls[0].Args)
+	}
+}
+
+func TestSet_UnprotectedStoresEmptyComment(t *testing.T) {
+	runner := &fakeRunner{results: []fakeResult{{Output: nil, Err: nil}}}
+	kc := &Keychain{Runner: runner}
+
+	if err := kc.SetWithProtection("kc:default", "API_KEY", "new-value", false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := fmt.Sprintf("%v", runner.calls[0].Args); got != fmt.Sprintf("%v", []string{"add-generic-password", "-s", "kc:default", "-a", "API_KEY", "-w", "new-value", "-j", "", "-U"}) {
+		t.Fatalf("args = %v", runner.calls[0].Args)
 	}
 }
 
@@ -168,9 +174,6 @@ class: "genp"
 
 	runner := &fakeRunner{
 		results: []fakeResult{
-			// first find-generic-password call (we ignore its output)
-			{Output: nil, Err: errors.New("exit status 44")},
-			// dump-keychain
 			{Output: []byte(dumpOutput), Err: nil},
 		},
 	}
@@ -191,7 +194,6 @@ class: "genp"
 func TestList_Empty(t *testing.T) {
 	runner := &fakeRunner{
 		results: []fakeResult{
-			{Output: nil, Err: errors.New("exit status 44")},
 			{Output: []byte("keychain: \"/Users/test/Library/Keychains/login.keychain-db\"\n"), Err: nil},
 		},
 	}
@@ -225,6 +227,58 @@ class: "genp"
 	}
 	if got[0] != "SECRET_A" || got[1] != "SECRET_B" {
 		t.Fatalf("unexpected: %v", got)
+	}
+}
+
+func TestParseMetadata(t *testing.T) {
+	dump := `class: "genp"
+    "svce"<blob>="kc:prod"
+    "acct"<blob>="SECRET_A"
+    "icmt"<blob>="kc-meta:v1:protected"
+class: "genp"
+    "svce"<blob>="kc:prod"
+    "acct"<blob>="SECRET_B"
+    "icmt"<blob>=""
+`
+	got := parseMetadata(dump, "kc:prod")
+	if len(got) != 2 {
+		t.Fatalf("expected 2, got %d: %v", len(got), got)
+	}
+	if !got[0].Protected {
+		t.Fatalf("first item should be protected: %#v", got[0])
+	}
+	if got[1].Protected {
+		t.Fatalf("second item should be unprotected: %#v", got[1])
+	}
+}
+
+func TestProtection(t *testing.T) {
+	dumpOutput := `class: "genp"
+    "svce"<blob>="kc:default"
+    "acct"<blob>="DB_HOST"
+    "icmt"<blob>="kc-meta:v1:protected"
+class: "genp"
+    "svce"<blob>="kc:default"
+    "acct"<blob>="DB_PASS"
+    "icmt"<blob>=""
+`
+	runner := &fakeRunner{results: []fakeResult{{Output: []byte(dumpOutput), Err: nil}, {Output: []byte(dumpOutput), Err: nil}}}
+	kc := &Keychain{Runner: runner}
+
+	protected, err := kc.Protection("kc:default", "DB_HOST")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !protected {
+		t.Fatal("DB_HOST should be protected")
+	}
+
+	protected, err = kc.Protection("kc:default", "DB_PASS")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if protected {
+		t.Fatal("DB_PASS should be unprotected")
 	}
 }
 

@@ -26,6 +26,16 @@ func newGetCmd(app *App) *cobra.Command {
 				return err
 			}
 			key := args[0]
+			metadata, err := app.Store.ListMetadata(vault)
+			if err != nil {
+				return fmt.Errorf("failed to inspect %q in vault %q: %w", key, vault, err)
+			}
+			if isProtected(metadata, key) {
+				session := authSession(app)
+				if err := session.Authorize("Unlock kc secret"); err != nil {
+					return err
+				}
+			}
 
 			value, err := app.Store.Get(vault, key)
 			if err != nil {

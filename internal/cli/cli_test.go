@@ -14,11 +14,12 @@ import (
 // --- Mock implementations ---
 
 type mockStore struct {
-	data map[string]map[string]string // vault -> key -> value
+	data      map[string]map[string]string // vault -> key -> value
+	protected map[string]map[string]bool
 }
 
 func newMockStore() *mockStore {
-	return &mockStore{data: make(map[string]map[string]string)}
+	return &mockStore{data: make(map[string]map[string]string), protected: make(map[string]map[string]bool)}
 }
 
 func (m *mockStore) Get(vault, key string) (string, error) {
@@ -34,10 +35,18 @@ func (m *mockStore) Get(vault, key string) (string, error) {
 }
 
 func (m *mockStore) Set(vault, key, value string) error {
+	return m.SetWithProtection(vault, key, value, true)
+}
+
+func (m *mockStore) SetWithProtection(vault, key, value string, protected bool) error {
 	if m.data[vault] == nil {
 		m.data[vault] = make(map[string]string)
 	}
+	if m.protected[vault] == nil {
+		m.protected[vault] = make(map[string]bool)
+	}
 	m.data[vault][key] = value
+	m.protected[vault][key] = protected
 	return nil
 }
 
@@ -50,6 +59,9 @@ func (m *mockStore) Delete(vault, key string) error {
 		return fmt.Errorf("key %q not found in vault %q", key, vault)
 	}
 	delete(v, key)
+	if m.protected[vault] != nil {
+		delete(m.protected[vault], key)
+	}
 	return nil
 }
 
@@ -63,6 +75,41 @@ func (m *mockStore) List(vault string) ([]string, error) {
 		keys = append(keys, k)
 	}
 	return keys, nil
+}
+
+func (m *mockStore) ListMetadata(vault string) ([]cli.SecretMetadata, error) {
+	v, ok := m.data[vault]
+	if !ok {
+		return nil, nil
+	}
+	items := make([]cli.SecretMetadata, 0, len(v))
+	for key := range v {
+		protection := cli.ProtectionUnprotected
+		if m.protected[vault][key] {
+			protection = cli.ProtectionProtected
+		}
+		items = append(items, cli.SecretMetadata{Key: key, Vault: vault, Protection: protection})
+	}
+	return items, nil
+}
+
+func (m *mockStore) ProtectAll(vault string) (int, error) {
+	v, ok := m.data[vault]
+	if !ok {
+		return 0, nil
+	}
+	if m.protected[vault] == nil {
+		m.protected[vault] = make(map[string]bool)
+	}
+	count := 0
+	for key := range v {
+		if m.protected[vault][key] {
+			continue
+		}
+		m.protected[vault][key] = true
+		count++
+	}
+	return count, nil
 }
 
 type mockVaultManager struct {
@@ -135,9 +182,13 @@ type mockBulkStore struct {
 }
 
 func (m *mockBulkStore) BulkSet(entries map[string]string, vault string) (int, error) {
+	return m.BulkSetWithProtection(entries, vault, true)
+}
+
+func (m *mockBulkStore) BulkSetWithProtection(entries map[string]string, vault string, protected bool) (int, error) {
 	n := 0
 	for k, v := range entries {
-		if err := m.mockStore.Set(vault, k, v); err != nil {
+		if err := m.mockStore.SetWithProtection(vault, k, v, protected); err != nil {
 			return n, err
 		}
 		n++

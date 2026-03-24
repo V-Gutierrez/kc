@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/v-gutierrez/kc/internal/auth"
 )
 
 // Version is set at build time via -ldflags.
@@ -15,6 +16,7 @@ type App struct {
 	Bulk      BulkStore
 	Vaults    VaultManager
 	Clipboard Clipboard
+	Auth      auth.Authorizer
 }
 
 // resolveVault returns the vault from --vault flag, or falls back to active vault,
@@ -78,12 +80,14 @@ func NewRootCmd(app *App) *cobra.Command {
 		newSetCmd(app),
 		newDelCmd(app),
 		newListCmd(app),
+		newSearchCmd(app),
 		newInitCmd(app),
 		newSetupCmd(app),
 		newVaultCmd(app),
 		newImportCmd(app),
 		newExportCmd(app),
 		newEnvCmd(app),
+		newProtectCmd(app),
 		newMigrateCmd(app),
 		newCompletionCmd(),
 	)

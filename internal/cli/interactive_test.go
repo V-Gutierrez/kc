@@ -6,12 +6,22 @@ type interactiveTestStore struct{}
 
 func (interactiveTestStore) Get(vault, key string) (string, error) { return "", nil }
 func (interactiveTestStore) Set(vault, key, value string) error    { return nil }
-func (interactiveTestStore) Delete(vault, key string) error        { return nil }
-func (interactiveTestStore) List(vault string) ([]string, error)   { return nil, nil }
+func (interactiveTestStore) SetWithProtection(vault, key, value string, protected bool) error {
+	return nil
+}
+func (interactiveTestStore) Delete(vault, key string) error      { return nil }
+func (interactiveTestStore) List(vault string) ([]string, error) { return nil, nil }
+func (interactiveTestStore) ListMetadata(vault string) ([]SecretMetadata, error) {
+	return nil, nil
+}
+func (interactiveTestStore) ProtectAll(vault string) (int, error) { return 0, nil }
 
 type interactiveTestBulk struct{ interactiveTestStore }
 
 func (interactiveTestBulk) BulkSet(entries map[string]string, vault string) (int, error) {
+	return len(entries), nil
+}
+func (interactiveTestBulk) BulkSetWithProtection(entries map[string]string, vault string, protected bool) (int, error) {
 	return len(entries), nil
 }
 func (interactiveTestBulk) GetAll(vault string) (map[string]string, error) {

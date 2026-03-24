@@ -7,9 +7,10 @@ import (
 )
 
 type ListItem struct {
-	Key   string `json:"key"`
-	Vault string `json:"vault"`
-	Value string `json:"value,omitempty"`
+	Key        string `json:"key"`
+	Vault      string `json:"vault"`
+	Value      string `json:"value,omitempty"`
+	Protection string `json:"protection,omitempty"`
 }
 
 type GetItem struct {

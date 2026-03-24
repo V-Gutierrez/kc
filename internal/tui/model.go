@@ -19,6 +19,7 @@ const allVaultsLabel = "All vaults"
 type Store interface {
 	Get(vault, key string) (string, error)
 	Set(vault, key, value string) error
+	SetWithProtection(vault, key, value string, protected bool) error
 	Delete(vault, key string) error
 	List(vault string) ([]string, error)
 }
@@ -624,7 +625,7 @@ func copyKnownCmd(deps Deps, item entry, value string) tea.Cmd {
 
 func saveCmd(deps Deps, item entry, value string) tea.Cmd {
 	return func() tea.Msg {
-		if err := deps.Store.Set(item.Vault, item.Key, value); err != nil {
+		if err := deps.Store.SetWithProtection(item.Vault, item.Key, value, true); err != nil {
 			return errMsg{err: err}
 		}
 		return savedMsg{entry: item, value: value}

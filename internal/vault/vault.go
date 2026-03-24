@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/v-gutierrez/kc/internal/keychain"
 )
 
 const (
@@ -32,9 +34,23 @@ var (
 type KeychainBackend interface {
 	Get(service, account string) (string, error)
 	Set(service, account, password string) error
+	SetWithProtection(service, account, password string, protected bool) error
 	Delete(service, account string) error
 	List(service string) ([]string, error)
+	ListMetadata(service string) ([]keychain.ItemMetadata, error)
+	ProtectAll(service string) (int, error)
 }
+
+type SecretMetadata struct {
+	Key        string
+	Protection string
+}
+
+const (
+	ProtectionUnknown     = "unknown"
+	ProtectionProtected   = "protected"
+	ProtectionUnprotected = "unprotected"
+)
 
 // Manager handles vault lifecycle.
 type Manager struct {
@@ -170,11 +186,15 @@ func (m *Manager) Get(key, vaultName string) (string, error) {
 
 // Set stores a secret in the specified vault (or active vault if empty).
 func (m *Manager) Set(key, value, vaultName string) error {
+	return m.SetWithProtection(key, value, vaultName, true)
+}
+
+func (m *Manager) SetWithProtection(key, value, vaultName string, protected bool) error {
 	vn, err := m.resolveVault(vaultName)
 	if err != nil {
 		return err
 	}
-	return m.KC.Set(ServiceName(vn), key, value)
+	return m.KC.SetWithProtection(ServiceName(vn), key, value, protected)
 }
 
 // Delete removes a secret from the specified vault (or active vault if empty).
@@ -217,6 +237,10 @@ func (m *Manager) ReadRawService(service string) (map[string]string, error) {
 
 // BulkSet stores multiple key/value pairs into the specified vault (or active vault if empty).
 func (m *Manager) BulkSet(entries map[string]string, vaultName string) (int, error) {
+	return m.BulkSetWithProtection(entries, vaultName, true)
+}
+
+func (m *Manager) BulkSetWithProtection(entries map[string]string, vaultName string, protected bool) (int, error) {
 	vn, err := m.resolveVault(vaultName)
 	if err != nil {
 		return 0, err
@@ -224,7 +248,7 @@ func (m *Manager) BulkSet(entries map[string]string, vaultName string) (int, err
 	svc := ServiceName(vn)
 	n := 0
 	for k, v := range entries {
-		if err := m.KC.Set(svc, k, v); err != nil {
+		if err := m.KC.SetWithProtection(svc, k, v, protected); err != nil {
 			return n, fmt.Errorf("vault: bulk set %q: %w", k, err)
 		}
 		n++
@@ -252,6 +276,34 @@ func (m *Manager) GetAllKeys(vaultName string) (map[string]string, error) {
 		result[k] = val
 	}
 	return result, nil
+}
+
+func (m *Manager) ListKeyMetadata(vaultName string) ([]SecretMetadata, error) {
+	vn, err := m.resolveVault(vaultName)
+	if err != nil {
+		return nil, err
+	}
+	items, err := m.KC.ListMetadata(ServiceName(vn))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]SecretMetadata, 0, len(items))
+	for _, item := range items {
+		protection := ProtectionUnprotected
+		if item.Protected {
+			protection = ProtectionProtected
+		}
+		result = append(result, SecretMetadata{Key: item.Account, Protection: protection})
+	}
+	return result, nil
+}
+
+func (m *Manager) ProtectAllKeys(vaultName string) (int, error) {
+	vn, err := m.resolveVault(vaultName)
+	if err != nil {
+		return 0, err
+	}
+	return m.KC.ProtectAll(ServiceName(vn))
 }
 
 // --- Helpers ---

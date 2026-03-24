@@ -5,15 +5,18 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/v-gutierrez/kc/internal/keychain"
 )
 
 // mockKC implements KeychainBackend for testing.
 type mockKC struct {
-	store map[string]map[string]string // service -> account -> password
+	store     map[string]map[string]string // service -> account -> password
+	protected map[string]map[string]bool
 }
 
 func newMockKC() *mockKC {
-	return &mockKC{store: make(map[string]map[string]string)}
+	return &mockKC{store: make(map[string]map[string]string), protected: make(map[string]map[string]bool)}
 }
 
 func (m *mockKC) Get(service, account string) (string, error) {
@@ -29,10 +32,18 @@ func (m *mockKC) Get(service, account string) (string, error) {
 }
 
 func (m *mockKC) Set(service, account, password string) error {
+	return m.SetWithProtection(service, account, password, true)
+}
+
+func (m *mockKC) SetWithProtection(service, account, password string, protected bool) error {
 	if m.store[service] == nil {
 		m.store[service] = make(map[string]string)
 	}
+	if m.protected[service] == nil {
+		m.protected[service] = make(map[string]bool)
+	}
 	m.store[service][account] = password
+	m.protected[service][account] = protected
 	return nil
 }
 
@@ -45,6 +56,9 @@ func (m *mockKC) Delete(service, account string) error {
 		return errors.New("not found")
 	}
 	delete(svc, account)
+	if m.protected[service] != nil {
+		delete(m.protected[service], account)
+	}
 	return nil
 }
 
@@ -58,6 +72,37 @@ func (m *mockKC) List(service string) ([]string, error) {
 		keys = append(keys, k)
 	}
 	return keys, nil
+}
+
+func (m *mockKC) ListMetadata(service string) ([]keychain.ItemMetadata, error) {
+	svc, ok := m.store[service]
+	if !ok {
+		return nil, nil
+	}
+	items := make([]keychain.ItemMetadata, 0, len(svc))
+	for key := range svc {
+		items = append(items, keychain.ItemMetadata{Account: key, Protected: m.protected[service][key]})
+	}
+	return items, nil
+}
+
+func (m *mockKC) ProtectAll(service string) (int, error) {
+	svc, ok := m.store[service]
+	if !ok {
+		return 0, nil
+	}
+	if m.protected[service] == nil {
+		m.protected[service] = make(map[string]bool)
+	}
+	count := 0
+	for key := range svc {
+		if m.protected[service][key] {
+			continue
+		}
+		m.protected[service][key] = true
+		count++
+	}
+	return count, nil
 }
 
 // newTestManager creates a Manager with a temp data dir.

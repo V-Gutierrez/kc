@@ -7,7 +7,7 @@ import (
 )
 
 func newSetCmd(app *App) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "set KEY VALUE",
 		Short: "Store or update a secret in the keychain",
 		Long:  "Stores VALUE under KEY in the active vault (or --vault). Creates or overwrites.",
@@ -18,8 +18,9 @@ func newSetCmd(app *App) *cobra.Command {
 				return err
 			}
 			key, value := args[0], args[1]
+			noProtect, _ := cmd.Flags().GetBool("no-protect")
 
-			if err := app.Store.Set(vault, key, value); err != nil {
+			if err := app.Store.SetWithProtection(vault, key, value, !noProtect); err != nil {
 				return fmt.Errorf("failed to set %q in vault %q: %w", key, vault, err)
 			}
 
@@ -27,4 +28,6 @@ func newSetCmd(app *App) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().Bool("no-protect", false, "store the secret without Touch ID protection")
+	return cmd
 }

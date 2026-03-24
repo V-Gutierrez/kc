@@ -20,9 +20,10 @@ type storeCall struct {
 }
 
 type setCall struct {
-	vault string
-	key   string
-	value string
+	vault     string
+	key       string
+	value     string
+	protected bool
 }
 
 func newMockStore() *mockStore {
@@ -38,7 +39,11 @@ func (m *mockStore) Get(vault, key string) (string, error) {
 }
 
 func (m *mockStore) Set(vault, key, value string) error {
-	m.setCalls = append(m.setCalls, setCall{vault: vault, key: key, value: value})
+	return m.SetWithProtection(vault, key, value, true)
+}
+
+func (m *mockStore) SetWithProtection(vault, key, value string, protected bool) error {
+	m.setCalls = append(m.setCalls, setCall{vault: vault, key: key, value: value, protected: protected})
 	if m.values[vault] == nil {
 		m.values[vault] = make(map[string]string)
 	}
@@ -280,7 +285,7 @@ func TestAddEditAndDeleteFlows(t *testing.T) {
 	msg = cmd()
 	updatedTea, _ = model.Update(msg)
 	model = updatedTea.(Model)
-	if last := store.setCalls[len(store.setCalls)-1]; last.vault != "prod" || last.key != "TOKEN" || last.value != "after" {
+	if last := store.setCalls[len(store.setCalls)-1]; last.vault != "prod" || last.key != "TOKEN" || last.value != "after" || !last.protected {
 		t.Fatalf("edit set call = %#v, want prod/TOKEN/after", last)
 	}
 

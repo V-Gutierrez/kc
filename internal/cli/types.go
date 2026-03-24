@@ -1,13 +1,28 @@
 package cli
 
+type SecretMetadata struct {
+	Key        string
+	Vault      string
+	Protection string
+}
+
+const (
+	ProtectionUnknown     = "unknown"
+	ProtectionProtected   = "protected"
+	ProtectionUnprotected = "unprotected"
+)
+
 // KeychainStore abstracts CRUD operations against the macOS Keychain.
 // The vault parameter corresponds to the Keychain "service" field (prefixed "kc:{vault}").
 // The key parameter corresponds to the Keychain "account" field.
 type KeychainStore interface {
 	Get(vault, key string) (string, error)
 	Set(vault, key, value string) error
+	SetWithProtection(vault, key, value string, protected bool) error
 	Delete(vault, key string) error
 	List(vault string) ([]string, error)
+	ListMetadata(vault string) ([]SecretMetadata, error)
+	ProtectAll(vault string) (int, error)
 }
 
 // VaultManager handles vault lifecycle: listing, creating, switching the active vault.
@@ -28,6 +43,7 @@ type Clipboard interface {
 type BulkStore interface {
 	KeychainStore
 	BulkSet(entries map[string]string, vault string) (int, error)
+	BulkSetWithProtection(entries map[string]string, vault string, protected bool) (int, error)
 	GetAll(vault string) (map[string]string, error)
 	ReadRawService(service string) (map[string]string, error)
 }
