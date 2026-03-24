@@ -41,7 +41,7 @@ brews:
       - kc
     repository:
       owner: v-gutierrez
-      name: kc
+      name: homebrew-kc
       branch: main
     directory: HomebrewFormula
     homepage: https://github.com/v-gutierrez/kc
