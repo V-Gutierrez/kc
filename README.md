@@ -14,11 +14,21 @@
   <a href="#quick-start">Quick Start</a> •
   <a href="#commands">Commands</a> •
   <a href="#vaults">Vaults</a> •
-  <a href="#shell-integration">Shell Integration</a>
+  <a href="#shell-integration">Shell Integration</a> •
+  <a href="#touch-id">Touch ID</a> •
+  <a href="#search">Search</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/v-gutierrez/kc/actions/workflows/ci.yml"><img src="https://github.com/v-gutierrez/kc/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <img src="https://img.shields.io/badge/version-v0.3.0-blue" alt="Version" />
+  <img src="https://img.shields.io/badge/platform-macOS-lightgrey" alt="macOS" />
+</p>
+
+---
+
+<p align="center">
+  <img src="assets/tui-screenshot.jpg" alt="kc interactive TUI" width="700" />
 </p>
 
 ---
@@ -30,6 +40,14 @@ Every developer on macOS has API keys in `.env` files, `.zshrc`, or `.bashrc` �
 The native Keychain is the right solution, but the `security` command UX is hostile. **kc** fixes that.
 
 Your secrets never leave the Secure Enclave. Zero external dependencies. Zero network calls. Ever.
+
+## What's New in v0.3.0
+
+- 🔐 **Touch ID protection (default on)** — all secrets require biometric authentication
+- 🔍 **`kc search`** — fuzzy search across all vaults
+- 📊 **`kc diff`** — compare secrets across vaults
+- 📝 **`kc list --json`** — JSON output for scripting
+- 🔒 **Audit logging** — track who accessed what, when
 
 ## Install
 
@@ -43,33 +61,39 @@ Or build from source:
 ```bash
 git clone https://github.com/v-gutierrez/kc.git
 cd kc
-go build -o kc ./cmd/kc
+go build -ldflags "-X github.com/v-gutierrez/kc/internal/cli.Version=v0.3.0" -o kc ./cmd/kc
 sudo mv kc /usr/local/bin/
 ```
 
 ## Quick Start
 
 ```bash
-# Store a secret
+# Store a secret (Touch ID protected by default)
 kc set API_KEY "sk-proj-abc123"
+
+# Store without Touch ID protection
+kc set API_KEY "sk-proj-abc123" --no-protect
 
 # Read it (copies to clipboard, auto-clears in 30s)
 kc get API_KEY
 
+# Search across all vaults
+kc search openai
+
 # List all keys (values masked)
 kc list
+
+# List as JSON (for scripting)
+kc list --json
 
 # Import from .env file
 kc import .env
 
-# Load all secrets into your shell
+# Load all secrets into your shell (single Touch ID prompt)
 eval "$(kc env)"
 
-# Print the shell snippet for your shell config
-kc init zsh
-
-# Migrate plaintext secrets from your shell rc file
-kc setup
+# Compare vaults
+kc diff prod staging
 
 # Interactive TUI
 kc
@@ -80,9 +104,13 @@ kc
 | Command | Description |
 |---------|-------------|
 | `kc get <key>` | Read a secret (copied to clipboard + printed masked) |
-| `kc set <key> [value]` | Store/update a secret (prompts if no value given) |
+| `kc set <key> [value]` | Store/update a secret — Touch ID protected by default |
+| `kc set <key> --no-protect` | Store without Touch ID protection |
 | `kc del <key>` | Delete a secret |
 | `kc list` | List all keys (values masked) |
+| `kc list --json` | List as JSON for scripting |
+| `kc search <query>` | Fuzzy search across all vaults |
+| `kc diff <vault1> <vault2>` | Compare keys between two vaults |
 | `kc import <file>` | Import from .env file → Keychain |
 | `kc export` | Export active vault as .env to stdout |
 | `kc export -o <file>` | Export to file |
@@ -93,6 +121,39 @@ kc
 | `kc vault list` | List all vaults |
 | `kc vault create <name>` | Create a new vault |
 | `kc vault switch <name>` | Set active vault |
+
+## Touch ID
+
+**v0.3.0** introduces biometric protection as the default for all secrets. Every `kc set` stores the secret with Touch ID access control — requiring your fingerprint to read it back.
+
+```bash
+# Default: Touch ID required
+kc set DB_PASSWORD "super-secret"
+
+# Opt out per key
+kc set PUBLIC_KEY "not-sensitive" --no-protect
+
+# kc env prompts Touch ID once, then unlocks all protected keys for the session
+eval "$(kc env)"
+```
+
+**Why this matters:**
+- Physical presence required — no remote exfiltration
+- Enterprise-grade audit trail (who touched what, when)
+- If Touch ID is unavailable, falls back to system password prompt
+- Zero friction in daily workflow — one fingerprint per shell session
+
+## Search
+
+Find secrets across all vaults instantly:
+
+```bash
+# Fuzzy search
+kc search api
+
+# Search with JSON output
+kc search openai --json
+```
 
 ## Vaults
 
@@ -150,9 +211,11 @@ eval "$(kc env --vault prod)"
 
 - **Offline only.** No network calls. Ever.
 - **Keychain-native.** AES-256 encryption via macOS Secure Enclave.
+- **Touch ID by default.** Physical presence required to read secrets.
 - **Clipboard auto-clear.** After `kc get`, clipboard clears in 30s.
 - **No plaintext config.** Vault list is inferred from Keychain — no files to leak.
 - **No shell history exposure.** `kc set` with no value prompts interactively (hidden input).
+- **Audit logging.** Every access logged with timestamp and context.
 
 ## Data Model
 
@@ -161,6 +224,7 @@ macOS Keychain (AES-256 via Secure Enclave)
   └── Service = "kc:{vault_name}"
         └── Account = key_name
               └── Password = secret_value
+              └── Access Control = Touch ID (default) | None (--no-protect)
 ```
 
 ## License
