@@ -30,9 +30,9 @@ func TestInitOutputsShellSnippet(t *testing.T) {
 		shell string
 		want  string
 	}{
-		{name: "zsh", shell: "zsh", want: "eval \"$(kc env)\"\nsource <(kc completion zsh)\n"},
-		{name: "bash", shell: "bash", want: "eval \"$(kc env)\"\nsource <(kc completion bash)\n"},
-		{name: "fish", shell: "fish", want: "kc env | source\nkc completion fish | source\n"},
+		{name: "zsh", shell: "zsh", want: "kc() {\n  if [ \"$1\" = \"load\" ]; then\n    if [ \"$#\" -gt 2 ]; then\n      printf 'kc load accepts at most one vault name\\n' >&2\n      return 1\n    fi\n    if [ -n \"$2\" ]; then\n      kc_env_output=\"$(command kc env --vault \"$2\")\" || return $?\n    else\n      kc_env_output=\"$(command kc env)\" || return $?\n    fi\n    eval \"$kc_env_output\"\n  else\n    command kc \"$@\"\n  fi\n}\neval \"$(command kc env)\"\nsource <(command kc completion zsh)\n"},
+		{name: "bash", shell: "bash", want: "kc() {\n  if [ \"$1\" = \"load\" ]; then\n    if [ \"$#\" -gt 2 ]; then\n      printf 'kc load accepts at most one vault name\\n' >&2\n      return 1\n    fi\n    if [ -n \"$2\" ]; then\n      kc_env_output=\"$(command kc env --vault \"$2\")\" || return $?\n    else\n      kc_env_output=\"$(command kc env)\" || return $?\n    fi\n    eval \"$kc_env_output\"\n  else\n    command kc \"$@\"\n  fi\n}\neval \"$(command kc env)\"\nsource <(command kc completion bash)\n"},
+		{name: "fish", shell: "fish", want: "function kc\n  if test \"$argv[1]\" = \"load\"\n    if test (count $argv) -gt 2\n      printf 'kc load accepts at most one vault name\\n' >&2\n      return 1\n    end\n    set -l kc_env_output\n    if test (count $argv) -ge 2\n      set kc_env_output (command kc env --vault \"$argv[2]\")\n      or return $status\n    else\n      set kc_env_output (command kc env)\n      or return $status\n    end\n    printf '%s\\n' $kc_env_output | source\n  else\n    command kc $argv\n  end\nend\ncommand kc env | source\ncommand kc completion fish | source\n"},
 	}
 
 	for _, tt := range tests {
@@ -128,10 +128,13 @@ func TestSetupMigratesZshSecretsAndInjectsSnippet(t *testing.T) {
 	if !strings.Contains(updated, "#kc-migrated# export AWS_SECRET_ACCESS_KEY='top-secret'") {
 		t.Fatalf("updated rc missing migrated AWS_SECRET_ACCESS_KEY line: %q", updated)
 	}
-	if !strings.Contains(updated, "eval \"$(kc env)\"") {
+	if !strings.Contains(updated, "printf 'kc load accepts at most one vault name\\n' >&2") {
+		t.Fatalf("updated rc missing load wrapper: %q", updated)
+	}
+	if !strings.Contains(updated, "eval \"$(command kc env)\"") {
 		t.Fatalf("updated rc missing env snippet: %q", updated)
 	}
-	if !strings.Contains(updated, "source <(kc completion zsh)") {
+	if !strings.Contains(updated, "source <(command kc completion zsh)") {
 		t.Fatalf("updated rc missing completion snippet: %q", updated)
 	}
 
@@ -208,7 +211,7 @@ func TestSetupFishWritesConfDFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected fish conf.d file: %v", err)
 	}
-	if string(data) != "kc env | source\nkc completion fish | source\n" {
+	if string(data) != "function kc\n  if test \"$argv[1]\" = \"load\"\n    if test (count $argv) -gt 2\n      printf 'kc load accepts at most one vault name\\n' >&2\n      return 1\n    end\n    set -l kc_env_output\n    if test (count $argv) -ge 2\n      set kc_env_output (command kc env --vault \"$argv[2]\")\n      or return $status\n    else\n      set kc_env_output (command kc env)\n      or return $status\n    end\n    printf '%s\\n' $kc_env_output | source\n  else\n    command kc $argv\n  end\nend\ncommand kc env | source\ncommand kc completion fish | source\n" {
 		t.Fatalf("conf.d file = %q, want fish source snippet with completion", string(data))
 	}
 }
@@ -241,10 +244,13 @@ func TestSetupWithoutSecretsStillInstallsInitSnippet(t *testing.T) {
 	if !strings.Contains(updated, original) {
 		t.Fatalf("updated rc missing original content: %q", updated)
 	}
-	if !strings.Contains(updated, "eval \"$(kc env)\"") {
+	if !strings.Contains(updated, "printf 'kc load accepts at most one vault name\\n' >&2") {
+		t.Fatalf("updated rc missing load wrapper: %q", updated)
+	}
+	if !strings.Contains(updated, "eval \"$(command kc env)\"") {
 		t.Fatalf("updated rc missing env snippet: %q", updated)
 	}
-	if !strings.Contains(updated, "source <(kc completion zsh)") {
+	if !strings.Contains(updated, "source <(command kc completion zsh)") {
 		t.Fatalf("updated rc missing completion snippet: %q", updated)
 	}
 }

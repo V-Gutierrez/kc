@@ -62,7 +62,7 @@ func TestRenderMigratedContentCommentsLinesAndAppendsSnippetOnce(t *testing.T) {
 	if !strings.Contains(updated, "#kc-migrated# export API_KEY=sk-test-123") {
 		t.Fatalf("updated = %q, want commented secret line", updated)
 	}
-	if !strings.Contains(updated, "# BEGIN kc") || !strings.Contains(updated, "eval \"$(kc env)\"") || !strings.Contains(updated, "kc completion zsh") {
+	if !strings.Contains(updated, "# BEGIN kc") || !strings.Contains(updated, "eval \"$(command kc env)\"") || !strings.Contains(updated, "command kc completion zsh") {
 		t.Fatalf("updated = %q, want kc init block with env and completion", updated)
 	}
 
@@ -78,13 +78,13 @@ func TestRenderMigratedContentCommentsLinesAndAppendsSnippetOnce(t *testing.T) {
 func TestInitSnippetForSupportedShells(t *testing.T) {
 	t.Parallel()
 
-	if got := initSnippet(shellZsh); got != "eval \"$(kc env)\"\nsource <(kc completion zsh)" {
+	if got := initSnippet(shellZsh); got != "kc() {\n  if [ \"$1\" = \"load\" ]; then\n    if [ \"$#\" -gt 2 ]; then\n      printf 'kc load accepts at most one vault name\\n' >&2\n      return 1\n    fi\n    if [ -n \"$2\" ]; then\n      kc_env_output=\"$(command kc env --vault \"$2\")\" || return $?\n    else\n      kc_env_output=\"$(command kc env)\" || return $?\n    fi\n    eval \"$kc_env_output\"\n  else\n    command kc \"$@\"\n  fi\n}\neval \"$(command kc env)\"\nsource <(command kc completion zsh)" {
 		t.Fatalf("zsh snippet = %q", got)
 	}
-	if got := initSnippet(shellBash); got != "eval \"$(kc env)\"\nsource <(kc completion bash)" {
+	if got := initSnippet(shellBash); got != "kc() {\n  if [ \"$1\" = \"load\" ]; then\n    if [ \"$#\" -gt 2 ]; then\n      printf 'kc load accepts at most one vault name\\n' >&2\n      return 1\n    fi\n    if [ -n \"$2\" ]; then\n      kc_env_output=\"$(command kc env --vault \"$2\")\" || return $?\n    else\n      kc_env_output=\"$(command kc env)\" || return $?\n    fi\n    eval \"$kc_env_output\"\n  else\n    command kc \"$@\"\n  fi\n}\neval \"$(command kc env)\"\nsource <(command kc completion bash)" {
 		t.Fatalf("bash snippet = %q", got)
 	}
-	if got := initSnippet(shellFish); got != "kc env | source\nkc completion fish | source" {
+	if got := initSnippet(shellFish); got != "function kc\n  if test \"$argv[1]\" = \"load\"\n    if test (count $argv) -gt 2\n      printf 'kc load accepts at most one vault name\\n' >&2\n      return 1\n    end\n    set -l kc_env_output\n    if test (count $argv) -ge 2\n      set kc_env_output (command kc env --vault \"$argv[2]\")\n      or return $status\n    else\n      set kc_env_output (command kc env)\n      or return $status\n    end\n    printf '%s\\n' $kc_env_output | source\n  else\n    command kc $argv\n  end\nend\ncommand kc env | source\ncommand kc completion fish | source" {
 		t.Fatalf("fish snippet = %q", got)
 	}
 }
@@ -105,10 +105,10 @@ func TestRenderMigratedContentReplacesExistingKCBlock(t *testing.T) {
 	if strings.Count(updated, kcBeginMarker) != 1 {
 		t.Fatalf("kc block count = %d, want 1 in %q", strings.Count(updated, kcBeginMarker), updated)
 	}
-	if !strings.Contains(updated, "source <(kc completion zsh)") {
+	if !strings.Contains(updated, "source <(command kc completion zsh)") {
 		t.Fatalf("updated content missing zsh completion source: %q", updated)
 	}
-	if strings.Contains(updated, kcBeginMarker+"\n"+"eval \"$(kc env)\"\n"+kcEndMarker) {
+	if strings.Contains(updated, kcBeginMarker+"\n"+"eval \"$(command kc env)\"\n"+kcEndMarker) {
 		t.Fatalf("old kc block should be replaced, got %q", updated)
 	}
 }

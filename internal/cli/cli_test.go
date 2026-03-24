@@ -1322,6 +1322,105 @@ func TestGetCompletesKeys(t *testing.T) {
 	}
 }
 
+func TestLoadHiddenFromHelp(t *testing.T) {
+	app, _, _, _ := newTestApp()
+
+	stdout, _, err := executeCmd(app, "--help")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(stdout, "\n  load") {
+		t.Fatalf("help output should not mention hidden load command: %q", stdout)
+	}
+}
+
+func TestLoadPrintsShellIntegrationHint(t *testing.T) {
+	app, _, _, _ := newTestAppWithBulk()
+
+	stdout, stderr, err := executeCmd(app, "load", "prod")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty", stderr)
+	}
+	if !strings.Contains(stdout, "shell integration") {
+		t.Fatalf("stdout = %q, want shell integration hint", stdout)
+	}
+	if !strings.Contains(stdout, "kc init zsh") {
+		t.Fatalf("stdout = %q, want init guidance", stdout)
+	}
+	if !strings.Contains(stdout, "kc env --vault prod") {
+		t.Fatalf("stdout = %q, want direct eval guidance for explicit vault", stdout)
+	}
+}
+
+func TestLoadCompletesVaultNames(t *testing.T) {
+	app, _, vaults, _ := newTestApp()
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vaults.Create("staging"); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, err := executeCmd(app, "__complete", "load", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, "default") {
+		t.Errorf("completion missing default: %q", stdout)
+	}
+	if !strings.Contains(stdout, "prod") {
+		t.Errorf("completion missing prod: %q", stdout)
+	}
+	if !strings.Contains(stdout, "staging") {
+		t.Errorf("completion missing staging: %q", stdout)
+	}
+	if !strings.Contains(stdout, ":4") {
+		t.Errorf("expected NoFileComp directive (:4) in output: %q", stdout)
+	}
+}
+
+func TestLoadCompletionFiltersByPrefix(t *testing.T) {
+	app, _, vaults, _ := newTestApp()
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
+	if err := vaults.Create("staging"); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, err := executeCmd(app, "__complete", "load", "st")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, "staging") {
+		t.Fatalf("completion missing staging: %q", stdout)
+	}
+	if strings.Contains(stdout, "default") || strings.Contains(stdout, "prod") {
+		t.Fatalf("vault completion should filter to prefix st: %q", stdout)
+	}
+}
+
+func TestLoadIgnoresSecondArg(t *testing.T) {
+	app, _, vaults, _ := newTestApp()
+	if err := vaults.Create("prod"); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, err := executeCmd(app, "__complete", "load", "prod", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(stdout, "default") || strings.Contains(stdout, "prod") {
+		t.Fatalf("expected no completions after first arg, got %q", stdout)
+	}
+	if !strings.Contains(stdout, ":4") {
+		t.Errorf("expected NoFileComp directive (:4) in output: %q", stdout)
+	}
+}
+
 func TestDelCompletesKeys(t *testing.T) {
 	app, store, _, _ := newTestApp()
 	if err := store.Set("default", "OLD_KEY", "v1"); err != nil {

@@ -147,9 +147,50 @@ func normalizeShell(shell string) (string, error) {
 
 func initSnippet(shell string) string {
 	if shell == shellFish {
-		return "kc env | source\nkc completion fish | source"
+		return strings.Join([]string{
+			"function kc",
+			"  if test \"$argv[1]\" = \"load\"",
+			"    if test (count $argv) -gt 2",
+			"      printf 'kc load accepts at most one vault name\\n' >&2",
+			"      return 1",
+			"    end",
+			"    set -l kc_env_output",
+			"    if test (count $argv) -ge 2",
+			"      set kc_env_output (command kc env --vault \"$argv[2]\")",
+			"      or return $status",
+			"    else",
+			"      set kc_env_output (command kc env)",
+			"      or return $status",
+			"    end",
+			"    printf '%s\\n' $kc_env_output | source",
+			"  else",
+			"    command kc $argv",
+			"  end",
+			"end",
+			"command kc env | source",
+			"command kc completion fish | source",
+		}, "\n")
 	}
-	return "eval \"$(kc env)\"\nsource <(kc completion " + shell + ")"
+	return strings.Join([]string{
+		"kc() {",
+		"  if [ \"$1\" = \"load\" ]; then",
+		"    if [ \"$#\" -gt 2 ]; then",
+		"      printf 'kc load accepts at most one vault name\\n' >&2",
+		"      return 1",
+		"    fi",
+		"    if [ -n \"$2\" ]; then",
+		"      kc_env_output=\"$(command kc env --vault \"$2\")\" || return $?",
+		"    else",
+		"      kc_env_output=\"$(command kc env)\" || return $?",
+		"    fi",
+		"    eval \"$kc_env_output\"",
+		"  else",
+		"    command kc \"$@\"",
+		"  fi",
+		"}",
+		"eval \"$(command kc env)\"",
+		"source <(command kc completion " + shell + ")",
+	}, "\n")
 }
 
 func primaryRCPath(shell string) (string, error) {
