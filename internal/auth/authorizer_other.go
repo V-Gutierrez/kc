@@ -10,6 +10,10 @@ func NewTouchIDAuthorizer() Authorizer {
 	return UnsupportedAuthorizer{}
 }
 
+func (UnsupportedAuthorizer) bootSessionEnabled() bool {
+	return true
+}
+
 func (UnsupportedAuthorizer) Authorize(reason string) error {
 	return fmt.Errorf("authentication is only supported on darwin")
 }

@@ -18,6 +18,10 @@ func NewTouchIDAuthorizer() Authorizer {
 	return TouchIDAuthorizer{}
 }
 
+func (TouchIDAuthorizer) bootSessionEnabled() bool {
+	return true
+}
+
 func (TouchIDAuthorizer) Authorize(reason string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
