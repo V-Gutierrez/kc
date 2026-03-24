@@ -68,7 +68,11 @@ sudo mv kc /usr/local/bin/
 ## Quick Start
 
 ```bash
-# Store a secret (Touch ID protected by default)
+# Interactive TUI (recommended for secret entry)
+kc
+
+# One-shot commands are still available,
+# but your shell may record CLI arguments in history.
 kc set API_KEY "sk-proj-abc123"
 
 # Store without Touch ID protection
@@ -95,8 +99,8 @@ eval "$(kc env)"
 # Compare vaults
 kc diff prod staging
 
-# Interactive TUI
-kc
+# Search across all vaults
+kc search openai
 ```
 
 ## Commands
@@ -214,7 +218,7 @@ eval "$(kc env --vault prod)"
 - **Touch ID by default.** Physical presence required to read secrets.
 - **Clipboard auto-clear.** After `kc get`, clipboard clears in 30s.
 - **No plaintext config.** Vault list is inferred from Keychain — no files to leak.
-- **No shell history exposure.** `kc set` with no value prompts interactively (hidden input).
+- **Prefer interactive entry for secrets.** The TUI avoids putting secret values on the command line. Shells may record `kc set KEY VALUE` in history.
 - **Audit logging.** Every access logged with timestamp and context.
 
 ## Data Model
@@ -229,7 +233,7 @@ macOS Keychain (AES-256 via Secure Enclave)
 
 ## License
 
-MIT
+[MIT](LICENSE)
 
 ---
 
