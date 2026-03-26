@@ -1,32 +1,13 @@
 package cli
 
 import (
-	"bufio"
 	"io"
-	"strings"
+
+	"github.com/v-gutierrez/kc/internal/envutil"
 )
 
 func parseEnvReader(r io.Reader) map[string]string {
-	result := make(map[string]string)
-	scanner := bufio.NewScanner(r)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, val, found := strings.Cut(line, "=")
-		if !found {
-			continue
-		}
-		key = strings.TrimSpace(key)
-		val = strings.TrimSpace(val)
-		if key == "" {
-			continue
-		}
-		val = stripInlineComment(val)
-		result[key] = unquoteValue(val)
-	}
-	return result
+	return envutil.ParseEnvReader(r)
 }
 
 func stripInlineComment(s string) string {
@@ -58,48 +39,13 @@ func unquoteValue(s string) string {
 }
 
 func shellQuote(s string) string {
-	if !needsQuoting(s) {
-		return s
-	}
-	var b strings.Builder
-	b.WriteByte('\'')
-	for _, c := range s {
-		if c == '\'' {
-			b.WriteString(`'\''`)
-		} else {
-			b.WriteRune(c)
-		}
-	}
-	b.WriteByte('\'')
-	return b.String()
+	return envutil.ShellQuote(s)
 }
 
 func needsQuoting(s string) bool {
-	for _, c := range s {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-			(c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.' || c == '/' || c == ':') {
-			return true
-		}
-	}
-	return false
+	return envutil.NeedsQuoting(s)
 }
 
 func dotenvQuote(s string) string {
-	if !needsQuoting(s) {
-		return s
-	}
-	var b strings.Builder
-	b.WriteByte('"')
-	for _, c := range s {
-		switch c {
-		case '\\':
-			b.WriteString(`\\`)
-		case '"':
-			b.WriteString(`\"`)
-		default:
-			b.WriteRune(c)
-		}
-	}
-	b.WriteByte('"')
-	return b.String()
+	return envutil.DotenvQuote(s)
 }

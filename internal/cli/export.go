@@ -3,9 +3,9 @@ package cli
 import (
 	"fmt"
 	"os"
-	"sort"
 
 	"github.com/spf13/cobra"
+	"github.com/v-gutierrez/kc/internal/envutil"
 )
 
 func newExportCmd(app *App) *cobra.Command {
@@ -60,21 +60,9 @@ func newExportCmd(app *App) *cobra.Command {
 }
 
 func sortedKeys(m map[string]string) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
+	return envutil.SortedKeys(m)
 }
 
 func joinLines(lines []string) string {
-	if len(lines) == 0 {
-		return ""
-	}
-	result := ""
-	for _, l := range lines {
-		result += l + "\n"
-	}
-	return result
+	return envutil.JoinLines(lines)
 }

@@ -190,11 +190,23 @@ func TestOverlayViewConfirmDelete(t *testing.T) {
 }
 
 func TestHelpViewContainsBindings(t *testing.T) {
-	m := NewModel(Deps{Store: newMockStore()})
+	m := NewModel(Deps{Store: newMockStore(), Bulk: newMockBulk()})
 	output := m.helpView()
-	for _, want := range []string{"/ search", "c copy", "d delete"} {
+	for _, want := range []string{"/ search", "c copy", "L load", "V vaults", "? help"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("helpView = %q, want %q", output, want)
+		}
+	}
+}
+
+func TestHelpOverlayContainsAllBindings(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore(), Bulk: newMockBulk()})
+	m.mode = modeOverlay
+	m.overlay.kind = overlayHelp
+	output := m.overlayView()
+	for _, want := range []string{"Navigation", "Actions", "Vault Management", "General", "L", "I", "X", "N", "V", "?"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("overlayView() help = %q, want %q", output, want)
 		}
 	}
 }
