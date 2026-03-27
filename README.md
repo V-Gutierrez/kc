@@ -79,13 +79,20 @@ kc set OPENAI_API_KEY
 # Read it (copies to clipboard, auto-clears in 30s)
 kc get OPENAI_API_KEY
 
+# Run a command with secrets injected (process-scoped — recommended)
+kc run -- node server.js
+kc run --vault prod -- npm start
+
+# Inject a single secret inline
+curl -H "Authorization: Bearer $(kc inject --key OPENAI_API_KEY)" https://api.openai.com/v1/models
+
 # Search across all vaults
 kc search openai
 
 # Import from .env file
 kc import .env
 
-# Load all secrets into your shell (single Touch ID prompt)
+# Load all secrets into your shell (single Touch ID prompt — use for interactive shells)
 eval "$(kc env)"
 
 # Compare vaults
@@ -102,6 +109,10 @@ kc diff prod staging
 | `kc del <key>` | Delete a secret |
 | `kc list` | List all keys (values masked) |
 | `kc list --json` | List as JSON for scripting |
+| `kc run -- <cmd> [args]` | **Run command with vault secrets injected (process-scoped)** |
+| `kc run --vault V -- <cmd>` | Run command with specific vault secrets |
+| `kc inject --key <key>` | **Print a single secret to stdout (no newline, no clipboard)** |
+| `kc inject --vault V --key K` | Inject from specific vault |
 | `kc search <query>` | Fuzzy search across all vaults |
 | `kc diff <vault1> <vault2>` | Compare keys between two vaults |
 | `kc import <file>` | Import from .env file → Keychain |
@@ -166,6 +177,42 @@ kc search api
 kc search openai --json
 ```
 
+## Secure Secret Injection
+
+### kc run — process-scoped secrets (recommended)
+
+```bash
+# Secrets are injected only into the child process environment
+kc run -- node server.js           # secrets only in this process
+kc run --vault prod -- npm start   # vault-specific
+kc run -- python manage.py runserver
+
+# When the process exits, secrets are gone. Nothing in the parent shell.
+# Other processes on the same machine can't read them.
+```
+
+### kc inject — single secret to stdout
+
+```bash
+# Print one secret — no trailing newline, no clipboard, no export
+curl -H "Authorization: Bearer $(kc inject --key API_TOKEN)" https://api.example.com
+kc inject --vault prod --key STRIPE_KEY | xargs -I{} some-tool --token {}
+```
+
+### Comparison: kc run vs eval
+
+| | `kc run -- cmd` | `eval "$(kc env)"` |
+|---|---|---|
+| Secrets scope | Child process only | Entire shell + all child processes |
+| Parent shell polluted | ✅ No | ❌ Yes |
+| Leaked to other tools | ✅ No | ❌ Any subprocess sees them |
+| Shell history risk | ✅ None | ⚠️ Values may appear |
+| Good for | Services, scripts, CI | Interactive shell setup |
+
+**Recommendation:** Use `kc run` for scripts and services. Use `eval "$(kc env)"` only in `.zshrc` for interactive shells.
+
+---
+
 ## Shell Integration
 
 Generate the right shell snippet:
@@ -190,6 +237,8 @@ kc env | source
 
 That's it. All secrets from your active vault are loaded as environment variables on shell startup.
 
+> **Note:** For scripts, servers, and automation, prefer `kc run -- <command>` over `eval "$(kc env)"` to scope secrets to the child process only.
+
 ### One-command onboarding
 
 If you already have plaintext secrets in `~/.zshrc`, `~/.bash_profile`, or fish config, run:
@@ -204,6 +253,8 @@ kc setup
 
 ```bash
 eval "$(kc env --vault prod)"
+# or, more securely:
+kc run --vault prod -- npm start
 ```
 
 ## Security
