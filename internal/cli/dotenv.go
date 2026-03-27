@@ -2,6 +2,7 @@ package cli
 
 import (
 	"io"
+	"strings"
 
 	"github.com/v-gutierrez/kc/internal/envutil"
 )

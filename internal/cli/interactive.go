@@ -33,8 +33,6 @@ func launchInteractive(app *App, initialFilter string) error {
 		Store:         tuiStoreAdapter{app.Store},
 		Vaults:        app.Vaults,
 		Clipboard:     app.Clipboard,
-		Bulk:          app.Bulk,
-		Auth:          app.Auth,
 		InitialFilter: initialFilter,
 	})
 }
