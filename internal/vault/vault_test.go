@@ -532,7 +532,7 @@ func TestDeleteVault_WithKeysNoForce(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when vault has keys and force=false")
 	}
-	want := "Vault has 2 keys. Delete them first or use --force."
+	want := "vault has 2 keys: delete them first or use --force"
 	if err.Error() != want {
 		t.Fatalf("error = %q, want %q", err.Error(), want)
 	}
