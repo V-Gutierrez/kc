@@ -1,5 +1,3 @@
-version: "2"
-
 run:
   timeout: 5m
 
@@ -10,9 +8,9 @@ linters:
   disable:
     - errcheck
 
-  settings:
-    staticcheck:
-      checks:
-        - "all"
-        - "-QF*"
-        - "-ST1000"
+linters-settings:
+  staticcheck:
+    checks:
+      - "all"
+      - "-QF*"
+      - "-ST1000"
