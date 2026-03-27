@@ -156,11 +156,6 @@ func (m *mockVaults) Delete(name string, force bool) error {
 	return nil
 }
 
-type bulkCall struct {
-	vault   string
-	entries map[string]string
-}
-
 type mockClipboard struct {
 	values []string
 }

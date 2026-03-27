@@ -11,18 +11,6 @@ func parseEnvReader(r io.Reader) map[string]string {
 	return envutil.ParseEnvReader(r)
 }
 
-func stripInlineComment(s string) string {
-	if len(s) == 0 {
-		return s
-	}
-	if s[0] == '\'' || s[0] == '"' {
-		return s
-	}
-	if idx := strings.Index(s, " #"); idx >= 0 {
-		return strings.TrimSpace(s[:idx])
-	}
-	return s
-}
 
 func unquoteValue(s string) string {
 	if len(s) >= 2 {
@@ -43,9 +31,6 @@ func shellQuote(s string) string {
 	return envutil.ShellQuote(s)
 }
 
-func needsQuoting(s string) bool {
-	return envutil.NeedsQuoting(s)
-}
 
 func dotenvQuote(s string) string {
 	return envutil.DotenvQuote(s)

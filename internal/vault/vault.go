@@ -195,7 +195,7 @@ func (m *Manager) DeleteVault(name string, force bool) error {
 	}
 
 	if len(keys) > 0 && !force {
-		return fmt.Errorf("Vault has %d keys. Delete them first or use --force.", len(keys))
+		return fmt.Errorf("vault has %d keys: delete them first or use --force", len(keys))
 	}
 
 	for _, k := range keys {
