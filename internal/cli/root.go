@@ -17,6 +17,7 @@ type App struct {
 	Vaults    VaultManager
 	Clipboard Clipboard
 	Auth      auth.Authorizer
+	Runner    CommandRunner
 }
 
 // resolveVault returns the vault from --vault flag, or falls back to active vault,
@@ -93,6 +94,8 @@ func NewRootCmd(app *App) *cobra.Command {
 		newProtectCmd(app),
 		newMigrateCmd(app),
 		newCompletionCmd(),
+		newRunCmd(app),
+		newInjectCmd(app),
 	)
 
 	return root

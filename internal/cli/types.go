@@ -1,5 +1,7 @@
 package cli
 
+import "fmt"
+
 type SecretMetadata struct {
 	Key        string
 	Vault      string
@@ -51,3 +53,17 @@ type BulkStore interface {
 
 // DefaultVault is the fallback when no --vault flag and no active vault override.
 const DefaultVault = "default"
+
+// ExitError wraps a non-zero child exit code so main can propagate it
+// without printing a duplicate error message.
+type ExitError struct {
+	Code int
+}
+
+func (e *ExitError) Error() string {
+	return fmt.Sprintf("exit status %d", e.Code)
+}
+
+// CommandRunner executes a command with the given environment.
+// It returns the exit code of the child process plus any system-level error.
+type CommandRunner func(name string, args []string, env []string) (exitCode int, err error)

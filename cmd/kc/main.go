@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 
 	"github.com/v-gutierrez/kc/internal/auth"
 	"github.com/v-gutierrez/kc/internal/cli"
@@ -31,13 +33,35 @@ func main() {
 		Vaults:    &vaultAdapter{vm: vm},
 		Clipboard: cb,
 		Auth:      auth.NewTouchIDAuthorizer(),
+		Runner:    execRunner,
 	}
 
 	root := cli.NewRootCmd(app)
 	if err := root.Execute(); err != nil {
+		var exitErr *cli.ExitError
+		if errors.As(err, &exitErr) {
+			os.Exit(exitErr.Code)
+		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func execRunner(name string, args []string, env []string) (int, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Env = env
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return exitErr.ExitCode(), nil
+		}
+		return 0, err
+	}
+	return 0, nil
 }
 
 // storeAdapter bridges vault.Manager to the cli.KeychainStore interface.
