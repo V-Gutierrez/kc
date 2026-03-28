@@ -282,6 +282,88 @@ func TestAutoHideTimerIs5Seconds(t *testing.T) {
 	// the command exists. The 5s change is validated by code review.
 }
 
+func TestTabBarRendersVaultNames(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.vaults = []string{allVaultsLabel, "default", "prod", "staging"}
+	m.currentFilter = "default"
+	output := m.tabBarView()
+	for _, want := range []string{"default", "prod", "staging"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("tabBarView missing vault %q, got: %q", want, output)
+		}
+	}
+}
+
+func TestTabBarHighlightsActiveVault(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.vaults = []string{allVaultsLabel, "default", "prod"}
+	m.currentFilter = "default"
+	output := m.tabBarView()
+	if !strings.Contains(output, "default") {
+		t.Fatalf("tabBarView missing active vault, got: %q", output)
+	}
+}
+
+func TestShiftTabCyclesVaultBackward(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	updated, _ := m.Update(loadedMsg{
+		vaults:      []string{"default", "prod"},
+		activeVault: "default",
+		items: []entry{
+			{Vault: "default", Key: "A"},
+			{Vault: "prod", Key: "B"},
+		},
+	})
+	model := updated.(Model)
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
+	model = updated.(Model)
+	if model.currentFilter != "default" {
+		t.Fatalf("filter after Tab = %q, want default", model.currentFilter)
+	}
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	model = updated.(Model)
+	if model.currentFilter != allVaultsLabel {
+		t.Fatalf("filter after Shift+Tab = %q, want %q", model.currentFilter, allVaultsLabel)
+	}
+}
+
+func TestNumberKeysQuickSelectVault(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	updated, _ := m.Update(loadedMsg{
+		vaults:      []string{"default", "prod", "staging"},
+		activeVault: "default",
+		items: []entry{
+			{Vault: "default", Key: "A"},
+			{Vault: "prod", Key: "B"},
+			{Vault: "staging", Key: "C"},
+		},
+	})
+	model := updated.(Model)
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+	model = updated.(Model)
+	if model.currentFilter != "prod" {
+		t.Fatalf("filter after pressing 2 = %q, want prod", model.currentFilter)
+	}
+}
+
+func TestTabBarShowsInView(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.vaults = []string{allVaultsLabel, "default", "prod"}
+	m.currentFilter = "default"
+	m.entries = []entry{{Vault: "default", Key: "TOKEN"}}
+	m.applyFilters()
+	m.loading = false
+	m.width = 80
+	m.height = 24
+	output := m.View()
+	if !strings.Contains(output, "default") || !strings.Contains(output, "prod") {
+		t.Fatalf("View() missing tab bar vault names, got: %q", output)
+	}
+}
+
 func TestEmptyVaultWelcomeMatchesRequestedCopy(t *testing.T) {
 	m := NewModel(Deps{Store: newMockStore()})
 	m.loading = false

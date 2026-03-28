@@ -271,6 +271,33 @@ func (m *Model) cycleVaultFilter() {
 	m.applyFilters()
 }
 
+func (m *Model) cycleVaultFilterReverse() {
+	if len(m.vaults) == 0 {
+		return
+	}
+	idx := 0
+	for i, vault := range m.vaults {
+		if vault == m.currentFilter {
+			idx = i
+			break
+		}
+	}
+	m.currentFilter = m.vaults[(idx-1+len(m.vaults))%len(m.vaults)]
+	m.clearPreview()
+	m.applyFilters()
+}
+
+func (m *Model) selectVaultByIndex(n int) bool {
+	realVaults := m.vaultHints()
+	if n < 0 || n >= len(realVaults) {
+		return false
+	}
+	m.currentFilter = realVaults[n]
+	m.clearPreview()
+	m.applyFilters()
+	return true
+}
+
 func (m *Model) clearPreview() {
 	m.preview = previewState{}
 	m.revealToken++

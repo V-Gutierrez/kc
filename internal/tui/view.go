@@ -27,6 +27,7 @@ func (m Model) View() string {
 
 	left := lipgloss.JoinVertical(lipgloss.Left,
 		m.headerView(),
+		m.tabBarView(),
 		m.searchView(),
 		m.list.View(),
 		m.helpView(),
@@ -113,6 +114,31 @@ func (m Model) headerView() string {
 		label = "key"
 	}
 	return m.styles.header.Render(fmt.Sprintf("🔒 kc • vault: %s • %d %s", vault, count, label))
+}
+
+func (m Model) tabBarView() string {
+	realVaults := m.vaultHints()
+	if len(realVaults) == 0 {
+		return ""
+	}
+
+	tabs := make([]string, 0, len(realVaults)+1)
+	for i, vault := range realVaults {
+		label := fmt.Sprintf("%d:%s", i+1, vault)
+		if vault == m.currentFilter {
+			tabs = append(tabs, m.styles.tabActive.Render(" "+label+" "))
+		} else {
+			tabs = append(tabs, m.styles.tabInactive.Render(" "+label+" "))
+		}
+	}
+
+	if m.currentFilter == allVaultsLabel {
+		tabs = append([]string{m.styles.tabActive.Render(" All ")}, tabs...)
+	} else {
+		tabs = append([]string{m.styles.tabInactive.Render(" All ")}, tabs...)
+	}
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
 }
 
 func (m Model) searchView() string {
@@ -326,7 +352,9 @@ func (m Model) helpOverlayView() string {
 			"d          Delete selected key",
 		}},
 		{"Vaults", []string{
-			"v/Tab      Cycle vault filter",
+			"Tab        Next vault filter",
+			"Shift+Tab  Previous vault filter",
+			"1-9        Quick-switch vault",
 		}},
 		{"General", []string{
 			"? or Esc   Close this help",

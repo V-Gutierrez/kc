@@ -113,6 +113,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.VaultNext):
 		m.cycleVaultFilter()
 		return m, nil
+	case key.Matches(msg, m.keys.VaultPrev):
+		m.cycleVaultFilterReverse()
+		return m, nil
+	case msg.String() >= "1" && msg.String() <= "9":
+		idx := int(msg.String()[0] - '1')
+		m.selectVaultByIndex(idx)
+		return m, nil
 	case key.Matches(msg, m.keys.Add):
 		m.mode = modeAdd
 		m.form = newFormState(m.activeVault, "", "")

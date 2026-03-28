@@ -40,6 +40,8 @@ type styles struct {
 	statusBar     lipgloss.Style
 	statusHint    lipgloss.Style
 	helpOverlay   lipgloss.Style
+	tabActive     lipgloss.Style
+	tabInactive   lipgloss.Style
 }
 
 func newStyles() styles {
@@ -86,6 +88,8 @@ func newStyles() styles {
 		statusBar:     lipgloss.NewStyle().Background(chiefsDark).Padding(0, 1),
 		statusHint:    lipgloss.NewStyle().Foreground(muted),
 		helpOverlay:   lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(chiefsGold).Padding(1, 2),
+		tabActive:     lipgloss.NewStyle().Bold(true).Foreground(chiefsGold).Background(chiefsDark).Padding(0, 0),
+		tabInactive:   lipgloss.NewStyle().Foreground(muted).Padding(0, 0),
 	}
 }
 

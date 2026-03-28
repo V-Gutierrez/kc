@@ -13,6 +13,7 @@ type keyMap struct {
 	Edit      key.Binding
 	Delete    key.Binding
 	VaultNext key.Binding
+	VaultPrev key.Binding
 	Confirm   key.Binding
 	Cancel    key.Binding
 	Quit      key.Binding
@@ -30,7 +31,8 @@ func defaultKeyMap() keyMap {
 		Add:       key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add")),
 		Edit:      key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
 		Delete:    key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete")),
-		VaultNext: key.NewBinding(key.WithKeys("v", "tab"), key.WithHelp("v/tab", "vault")),
+		VaultNext: key.NewBinding(key.WithKeys("tab"), key.WithHelp("Tab", "next vault")),
+		VaultPrev: key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("S-Tab", "prev vault")),
 		Confirm:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "confirm")),
 		Cancel:    key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 		Quit:      key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
