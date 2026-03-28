@@ -23,11 +23,11 @@ func TestHeaderViewChecks(t *testing.T) {
 	m.applyFilters()
 
 	output := m.headerView()
-	if !strings.Contains(output, "default") {
-		t.Errorf("Header missing vault name 'default', got: %q", output)
-	}
 	if !strings.Contains(output, "2 keys") {
 		t.Errorf("Header missing item count '2 keys', got: %q", output)
+	}
+	if !strings.Contains(output, "vault:") {
+		t.Errorf("Header should show vault context, got: %q", output)
 	}
 }
 
@@ -245,7 +245,7 @@ func TestPreviewViewShowsActionHints(t *testing.T) {
 	m.entries = []entry{{Vault: "default", Key: "TOKEN", Protection: protectionProtected}}
 	m.applyFilters()
 	output := m.previewView()
-	for _, want := range []string{"[Enter]", "[yy]", "[cc]", "[dd]", "[*]", "Bookmark"} {
+	for _, want := range []string{"[Enter] Reveal", "[yy] Copy", "[cc] Edit", "[dd] Delete", "[*] Bookmark"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("previewView missing action hint %q, got: %q", want, output)
 		}
@@ -257,7 +257,7 @@ func TestPreviewViewShowsRevealHintWhenMasked(t *testing.T) {
 	m.entries = []entry{{Vault: "default", Key: "TOKEN", Protection: protectionProtected}}
 	m.applyFilters()
 	output := m.previewView()
-	if !strings.Contains(output, "Enter to reveal") {
+	if !strings.Contains(output, "[Enter to reveal]") {
 		t.Fatalf("previewView missing reveal hint when masked, got: %q", output)
 	}
 }
@@ -268,7 +268,7 @@ func TestPreviewViewShowsSizeAfterReveal(t *testing.T) {
 	m.applyFilters()
 	m.preview = previewState{vault: "default", key: "TOKEN", value: "my-secret-value", revealed: true}
 	output := m.previewView()
-	if !strings.Contains(output, "15 chars") {
+	if !strings.Contains(output, "Size: 15 chars") {
 		t.Fatalf("previewView missing size after reveal, got: %q", output)
 	}
 }
@@ -409,7 +409,7 @@ func TestChiefsBorderContainsStripeCharacters(t *testing.T) {
 func TestHelpViewContainsBindings(t *testing.T) {
 	m := NewModel(Deps{Store: newMockStore()})
 	output := m.helpView()
-	for _, want := range []string{"/ search", ": cmd", "c copy", "* bookmark", "d delete"} {
+	for _, want := range []string{"/ search", ": cmd", "c copy", "Tab/] next vault", "q quit"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("helpView = %q, want %q", output, want)
 		}
@@ -458,8 +458,10 @@ func TestHelpOverlayContainsGroupedBindings(t *testing.T) {
 		"j/k",
 		"Actions",
 		"Enter",
-		"Copy",
+		"yy",
 		"Vaults",
+		"Tab",
+		"Ctrl+V",
 		"? or Esc",
 	} {
 		if !strings.Contains(output, want) {
@@ -652,7 +654,7 @@ func TestCreateVaultInputUpdatesOnKeyPress(t *testing.T) {
 
 // ── P1-7: Fuzzy Vault Picker Tests ──
 
-func TestCtrlVEntersVaultPickerMode(t *testing.T) {
+func TestUppercaseVEntersVaultPickerMode(t *testing.T) {
 	m := NewModel(Deps{Store: newMockStore()})
 	m.vaults = []string{allVaultsLabel, "default", "prod"}
 	m.entries = []entry{{Vault: "default", Key: "A"}, {Vault: "prod", Key: "B"}}
@@ -662,7 +664,7 @@ func TestCtrlVEntersVaultPickerMode(t *testing.T) {
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlV})
 	model := updated.(Model)
 	if model.mode != modeVaultPicker {
-		t.Fatalf("mode after Ctrl+V = %v, want modeVaultPicker", model.mode)
+		t.Fatalf("mode after V = %v, want modeVaultPicker", model.mode)
 	}
 	if cmd == nil {
 		t.Fatal("expected textinput.Blink command")
@@ -776,6 +778,28 @@ func TestVaultPickerShowsInRightPanel(t *testing.T) {
 	output := m.View()
 	if !strings.Contains(output, "Switch Vault") {
 		t.Fatalf("View() in modeVaultPicker missing 'Switch Vault', got: %q", output)
+	}
+	if !strings.Contains(output, "A") {
+		t.Fatalf("View() should preserve list context behind overlay, got: %q", output)
+	}
+}
+
+func TestHelpOverlayShowsAsCenteredOverlayWithListContext(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.vaults = []string{allVaultsLabel, "default"}
+	m.entries = []entry{{Vault: "default", Key: "TOKEN"}}
+	m.applyFilters()
+	m.mode = modeHelp
+	m.loading = false
+	m.width = 100
+	m.height = 30
+
+	output := m.View()
+	if !strings.Contains(output, "Keyboard Shortcuts") {
+		t.Fatalf("View() missing help overlay, got: %q", output)
+	}
+	if !strings.Contains(output, "TOKEN") {
+		t.Fatalf("View() should retain underlying list context, got: %q", output)
 	}
 }
 

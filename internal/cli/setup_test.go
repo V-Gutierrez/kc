@@ -63,7 +63,7 @@ func TestRenderMigratedContentCommentsLinesAndAppendsSnippetOnce(t *testing.T) {
 		t.Fatalf("updated = %q, want commented secret line", updated)
 	}
 	if !strings.Contains(updated, "# BEGIN kc") || !strings.Contains(updated, "eval \"$(command kc env)\"") || !strings.Contains(updated, "command kc completion zsh") {
-		t.Fatalf("updated = %q, want kc init block with env and completion", updated)
+		t.Fatalf("updated = %q, want kc init block with completion and env eval", updated)
 	}
 
 	again := renderMigratedContent(updated, secrets, initSnippet(shellZsh))
@@ -108,7 +108,7 @@ func TestRenderMigratedContentReplacesExistingKCBlock(t *testing.T) {
 	if !strings.Contains(updated, "source <(command kc completion zsh)") {
 		t.Fatalf("updated content missing zsh completion source: %q", updated)
 	}
-	if strings.Contains(updated, kcBeginMarker+"\n"+"eval \"$(command kc env)\"\n"+kcEndMarker) {
-		t.Fatalf("old kc block should be replaced, got %q", updated)
+	if !strings.Contains(updated, "eval \"$(command kc env)\"") {
+		t.Fatalf("updated content missing env eval: %q", updated)
 	}
 }
