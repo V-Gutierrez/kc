@@ -39,6 +39,7 @@ type styles struct {
 	breadcrumb    lipgloss.Style
 	statusBar     lipgloss.Style
 	statusHint    lipgloss.Style
+	helpOverlay   lipgloss.Style
 }
 
 func newStyles() styles {
@@ -84,6 +85,7 @@ func newStyles() styles {
 		breadcrumb:    lipgloss.NewStyle().Foreground(chiefsGold).Bold(true),
 		statusBar:     lipgloss.NewStyle().Background(chiefsDark).Padding(0, 1),
 		statusHint:    lipgloss.NewStyle().Foreground(muted),
+		helpOverlay:   lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(chiefsGold).Padding(1, 2),
 	}
 }
 

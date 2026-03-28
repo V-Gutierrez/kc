@@ -16,6 +16,7 @@ type keyMap struct {
 	Confirm   key.Binding
 	Cancel    key.Binding
 	Quit      key.Binding
+	Help      key.Binding
 }
 
 func defaultKeyMap() keyMap {
@@ -33,6 +34,7 @@ func defaultKeyMap() keyMap {
 		Confirm:   key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "confirm")),
 		Cancel:    key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 		Quit:      key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+		Help:      key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 	}
 }
 

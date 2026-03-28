@@ -77,6 +77,7 @@ const (
 	modeAdd
 	modeEdit
 	modeConfirmDelete
+	modeHelp
 )
 
 type previewState struct {

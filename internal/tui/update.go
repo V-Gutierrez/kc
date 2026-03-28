@@ -98,9 +98,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleFormKey(msg)
 	case modeConfirmDelete:
 		return m.handleDeleteConfirm(msg)
+	case modeHelp:
+		return m.handleHelpKey(msg)
 	}
 
 	switch {
+	case key.Matches(msg, m.keys.Help):
+		m.mode = modeHelp
+		return m, nil
 	case key.Matches(msg, m.keys.Search):
 		m.mode = modeSearch
 		m.search.Focus()
@@ -249,6 +254,14 @@ func (m Model) handleDeleteConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, deleteCmd(m.deps, selected)
 	}
 	m.mode = modeBrowse
+	return m, nil
+}
+
+func (m Model) handleHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if key.Matches(msg, m.keys.Help) || key.Matches(msg, m.keys.Cancel) {
+		m.mode = modeBrowse
+		return m, nil
+	}
 	return m, nil
 }
 

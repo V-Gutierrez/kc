@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestHeaderViewChecks(t *testing.T) {
@@ -252,5 +253,74 @@ func TestHelpViewContainsBindings(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("helpView = %q, want %q", output, want)
 		}
+	}
+}
+
+func TestHelpOverlayTogglesWithQuestionMark(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.entries = []entry{{Vault: "default", Key: "TOKEN"}}
+	m.applyFilters()
+	m.loading = false
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	model := updated.(Model)
+	if model.mode != modeHelp {
+		t.Fatalf("mode after ? = %v, want modeHelp", model.mode)
+	}
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	model = updated.(Model)
+	if model.mode != modeBrowse {
+		t.Fatalf("mode after second ? = %v, want modeBrowse", model.mode)
+	}
+}
+
+func TestHelpOverlayDismissesWithEsc(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.mode = modeHelp
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+	if model.mode != modeBrowse {
+		t.Fatalf("mode after Esc in help = %v, want modeBrowse", model.mode)
+	}
+}
+
+func TestHelpOverlayContainsGroupedBindings(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.mode = modeHelp
+	m.width = 80
+	m.height = 24
+
+	output := m.helpOverlayView()
+	for _, want := range []string{
+		"Navigation",
+		"j/k",
+		"Actions",
+		"Enter",
+		"Copy",
+		"Vaults",
+		"? or Esc",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("helpOverlay missing %q, got: %q", want, output)
+		}
+	}
+}
+
+func TestHelpOverlayBlocksOtherKeys(t *testing.T) {
+	store := newMockStore()
+	m := NewModel(Deps{Store: store})
+	m.mode = modeHelp
+	m.entries = []entry{{Vault: "default", Key: "TOKEN"}}
+	m.applyFilters()
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model := updated.(Model)
+	if model.mode != modeHelp {
+		t.Fatalf("d should not switch mode in help overlay, got %v", model.mode)
+	}
+	if cmd != nil {
+		t.Fatal("d should not produce a command in help overlay")
 	}
 }

@@ -36,6 +36,9 @@ func (m Model) View() string {
 	if m.mode == modeAdd || m.mode == modeEdit || m.mode == modeConfirmDelete {
 		right = m.overlayView()
 	}
+	if m.mode == modeHelp {
+		right = m.helpOverlayView()
+	}
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top,
 		lipgloss.NewStyle().Width(max(40, m.width/2)).Render(left),
@@ -93,6 +96,8 @@ func (m Model) contextualHints() string {
 		return "Tab next • Esc cancel • Enter confirm"
 	case modeConfirmDelete:
 		return "y confirm • n cancel"
+	case modeHelp:
+		return "? or Esc close help"
 	}
 	return "/ search  : cmd  ? help"
 }
@@ -279,6 +284,47 @@ func (m Model) welcomeView() string {
 		m.styles.subtle.Render("Or press `a` to add a secret right here."),
 	)
 	return m.styles.app.Render(lipgloss.Place(max(m.width, 80), max(m.height, 24), lipgloss.Center, lipgloss.Center, m.styles.welcome.Render(content)))
+}
+
+func (m Model) helpOverlayView() string {
+	sections := []struct {
+		title string
+		binds []string
+	}{
+		{"Navigation", []string{
+			"j/k        Up / Down",
+			"g/G        Top / Bottom",
+			"Tab        Next vault filter",
+			"/          Search",
+		}},
+		{"Actions", []string{
+			"Enter      Reveal / Copy revealed",
+			"c          Copy (reveal + clipboard)",
+			"a          Add new key",
+			"e          Edit selected key",
+			"d          Delete selected key",
+		}},
+		{"Vaults", []string{
+			"v/Tab      Cycle vault filter",
+		}},
+		{"General", []string{
+			"? or Esc   Close this help",
+			"q          Quit",
+		}},
+	}
+
+	var lines []string
+	lines = append(lines, m.styles.header.Render("Keyboard Shortcuts"))
+	lines = append(lines, "")
+	for _, section := range sections {
+		lines = append(lines, m.styles.previewTitle.Render(section.title))
+		for _, bind := range section.binds {
+			lines = append(lines, m.styles.normal.Render("  "+bind))
+		}
+		lines = append(lines, "")
+	}
+	lines = append(lines, m.styles.subtle.Render("Press ? or Esc to close"))
+	return m.styles.helpOverlay.Render(strings.Join(lines, "\n"))
 }
 
 func maskedValue(item entry, preview previewState) string {
