@@ -96,7 +96,7 @@ func (s *storeAdapter) ListMetadata(vaultName string) ([]cli.SecretMetadata, err
 	}
 	result := make([]cli.SecretMetadata, 0, len(items))
 	for _, item := range items {
-		result = append(result, cli.SecretMetadata{Key: item.Key, Vault: vaultName, Protection: item.Protection})
+		result = append(result, cli.SecretMetadata{Key: item.Key, Vault: vaultName, Protection: item.Protection, Modified: item.Modified})
 	}
 	return result, nil
 }
@@ -162,7 +162,7 @@ func (b *bulkAdapter) ListMetadata(vaultName string) ([]cli.SecretMetadata, erro
 	}
 	result := make([]cli.SecretMetadata, 0, len(items))
 	for _, item := range items {
-		result = append(result, cli.SecretMetadata{Key: item.Key, Vault: vaultName, Protection: item.Protection})
+		result = append(result, cli.SecretMetadata{Key: item.Key, Vault: vaultName, Protection: item.Protection, Modified: item.Modified})
 	}
 	return result, nil
 }

@@ -30,7 +30,7 @@ func loadEntriesCmd(deps Deps) tea.Cmd {
 				if protection == "" {
 					protection = protectionProtected
 				}
-				items = append(items, entry{Vault: vault, Key: m.Key, Protection: protection})
+				items = append(items, entry{Vault: vault, Key: m.Key, Protection: protection, Modified: m.Modified})
 			}
 		}
 		return loadedMsg{vaults: vaults, activeVault: active, items: items}

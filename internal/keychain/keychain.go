@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Common errors returned by Keychain operations.
@@ -39,6 +40,7 @@ type Keychain struct {
 type ItemMetadata struct {
 	Account   string
 	Protected bool
+	Modified  string
 }
 
 const protectedComment = "kc-meta:v1:protected"
@@ -189,19 +191,20 @@ func parseAccounts(dump, service string) []string {
 func parseMetadata(dump, service string) []ItemMetadata {
 	items := make([]ItemMetadata, 0)
 	for _, block := range strings.Split(dump, "class:") {
-		itemService, itemAccount, comment := parseBlock(block)
+		itemService, itemAccount, comment, modified := parseBlock(block)
 		if itemService != service || itemAccount == "" {
 			continue
 		}
-		items = append(items, ItemMetadata{Account: itemAccount, Protected: isProtectedComment(comment)})
+		items = append(items, ItemMetadata{Account: itemAccount, Protected: isProtectedComment(comment), Modified: formatModifiedTimestamp(modified)})
 	}
 	return items
 }
 
-func parseBlock(block string) (string, string, string) {
+func parseBlock(block string) (string, string, string, string) {
 	var service string
 	var account string
 	var comment string
+	var modified string
 
 	for _, line := range strings.Split(block, "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -212,10 +215,12 @@ func parseBlock(block string) (string, string, string) {
 			account = extractQuotedValue(trimmed)
 		case strings.Contains(trimmed, `"icmt"`):
 			comment = extractQuotedValue(trimmed)
+		case strings.Contains(trimmed, `"mdat"`):
+			modified = extractTimedateValue(trimmed)
 		}
 	}
 
-	return service, account, comment
+	return service, account, comment, modified
 }
 
 func isProtectedComment(comment string) bool {
@@ -239,4 +244,29 @@ func extractQuotedValue(line string) string {
 		return ""
 	}
 	return rest[:end]
+}
+
+func extractTimedateValue(line string) string {
+	lastQuote := strings.LastIndex(line, `"`)
+	if lastQuote <= 0 {
+		return ""
+	}
+	prevQuote := strings.LastIndex(line[:lastQuote], `"`)
+	if prevQuote < 0 {
+		return ""
+	}
+	value := line[prevQuote+1 : lastQuote]
+	return strings.TrimSuffix(value, `\000`)
+}
+
+func formatModifiedTimestamp(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	parsed, err := time.Parse("20060102150405Z", raw)
+	if err != nil {
+		return raw
+	}
+	return parsed.Format("2006-01-02 15:04")
 }

@@ -27,6 +27,7 @@ type SecretMetadata struct {
 	Key        string
 	Vault      string
 	Protection string
+	Modified   string
 }
 
 type Store interface {
@@ -60,6 +61,7 @@ type entry struct {
 	Vault      string
 	Key        string
 	Protection string
+	Modified   string
 }
 
 func (e entry) FilterValue() string {
@@ -80,6 +82,7 @@ const (
 	modeConfirmDelete
 	modeHelp
 	modeCreateVault
+	modeVaultPicker
 )
 
 type previewState struct {
@@ -140,28 +143,29 @@ type vaultCreatedMsg struct {
 type errMsg struct{ err error }
 
 type Model struct {
-	deps           Deps
-	list           list.Model
-	search         textinput.Model
-	vaultNameInput textinput.Model
-	keys           keyMap
-	styles         styles
-	entries        []entry
-	vaults         []string
-	currentFilter  string
-	activeVault    string
-	mode           mode
-	preview        previewState
-	form           formState
-	loading        bool
-	status         string
-	flashMessage   string
-	flashToken     int
-	err            error
-	width          int
-	height         int
-	revealToken    int
-	delegate       itemDelegate
+	deps             Deps
+	list             list.Model
+	search           textinput.Model
+	vaultNameInput   textinput.Model
+	vaultPickerInput textinput.Model
+	keys             keyMap
+	styles           styles
+	entries          []entry
+	vaults           []string
+	currentFilter    string
+	activeVault      string
+	mode             mode
+	preview          previewState
+	form             formState
+	loading          bool
+	status           string
+	flashMessage     string
+	flashToken       int
+	err              error
+	width            int
+	height           int
+	revealToken      int
+	delegate         itemDelegate
 }
 
 func NewModel(deps Deps) Model {
@@ -178,15 +182,22 @@ func NewModel(deps Deps) Model {
 	vaultInput.Width = 24
 	vaultInput.Prompt = "new vault> "
 
+	pickerInput := textinput.New()
+	pickerInput.Placeholder = "filter vaults..."
+	pickerInput.CharLimit = 64
+	pickerInput.Width = 24
+	pickerInput.Prompt = "> "
+
 	m := Model{
-		deps:           deps,
-		keys:           defaultKeyMap(),
-		styles:         styles,
-		search:         search,
-		vaultNameInput: vaultInput,
-		currentFilter:  allVaultsLabel,
-		mode:           modeBrowse,
-		loading:        true,
+		deps:             deps,
+		keys:             defaultKeyMap(),
+		styles:           styles,
+		search:           search,
+		vaultNameInput:   vaultInput,
+		vaultPickerInput: pickerInput,
+		currentFilter:    allVaultsLabel,
+		mode:             modeBrowse,
+		loading:          true,
 	}
 	delegate := itemDelegate{styles: &m.styles, model: &m}
 	m.delegate = delegate
@@ -472,6 +483,28 @@ func (m Model) vaultHints() []string {
 		hints = append(hints, vault)
 	}
 	return hints
+}
+
+func (m Model) fuzzyMatchVault(query string) string {
+	realVaults := m.vaultHints()
+	if len(realVaults) == 0 {
+		return ""
+	}
+	matches := fuzzy.Find(strings.ToLower(query), realVaults)
+	if len(matches) == 0 {
+		return ""
+	}
+	return realVaults[matches[0].Index]
+}
+
+func (m Model) vaultKeyCount(vault string) int {
+	count := 0
+	for _, e := range m.entries {
+		if e.Vault == vault {
+			count++
+		}
+	}
+	return count
 }
 
 func prefixOf(key string) string {

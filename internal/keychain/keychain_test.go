@@ -237,6 +237,7 @@ func TestParseMetadata(t *testing.T) {
     "svce"<blob>="kc:prod"
     "acct"<blob>="SECRET_A"
     "icmt"<blob>="kc-meta:v1:protected"
+    "mdat"<timedate>=0x32303234303231383132313435365A00  "20240218121456Z\000"
 class: "genp"
     "svce"<blob>="kc:prod"
     "acct"<blob>="SECRET_B"
@@ -249,8 +250,27 @@ class: "genp"
 	if !got[0].Protected {
 		t.Fatalf("first item should be protected: %#v", got[0])
 	}
+	if got[0].Modified != "2024-02-18 12:14" {
+		t.Fatalf("first item modified = %q, want 2024-02-18 12:14", got[0].Modified)
+	}
 	if got[1].Protected {
 		t.Fatalf("second item should be unprotected: %#v", got[1])
+	}
+}
+
+func TestExtractTimedateValue(t *testing.T) {
+	line := `"mdat"<timedate>=0x32303234303231383132313435365A00  "20240218121456Z\000"`
+	if got := extractTimedateValue(line); got != "20240218121456Z" {
+		t.Fatalf("extractTimedateValue() = %q, want 20240218121456Z", got)
+	}
+}
+
+func TestFormatModifiedTimestamp(t *testing.T) {
+	if got := formatModifiedTimestamp("20240218121456Z"); got != "2024-02-18 12:14" {
+		t.Fatalf("formatModifiedTimestamp() = %q, want 2024-02-18 12:14", got)
+	}
+	if got := formatModifiedTimestamp("not-a-timestamp"); got != "not-a-timestamp" {
+		t.Fatalf("formatModifiedTimestamp() fallback = %q", got)
 	}
 }
 

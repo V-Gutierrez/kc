@@ -219,11 +219,24 @@ func TestPreviewViewShowsSelectedEntry(t *testing.T) {
 
 func TestPreviewViewShowsCategory(t *testing.T) {
 	m := NewModel(Deps{Store: newMockStore()})
-	m.entries = []entry{{Vault: "default", Key: "AWS_API_KEY", Protection: protectionProtected}}
+	m.entries = []entry{{Vault: "default", Key: "AWS_API_KEY", Protection: protectionProtected, Modified: "2024-02-18 12:14"}}
 	m.applyFilters()
 	output := m.previewView()
 	if !strings.Contains(output, "AWS") {
 		t.Fatalf("previewView missing category, got: %q", output)
+	}
+	if !strings.Contains(output, "2024-02-18 12:14") {
+		t.Fatalf("previewView missing modified metadata, got: %q", output)
+	}
+}
+
+func TestPreviewViewShowsUnknownModifiedWhenMissing(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.entries = []entry{{Vault: "default", Key: "TOKEN", Protection: protectionProtected}}
+	m.applyFilters()
+	output := m.previewView()
+	if !strings.Contains(output, "Unknown") {
+		t.Fatalf("previewView missing fallback modified label, got: %q", output)
 	}
 }
 
@@ -634,5 +647,167 @@ func TestCreateVaultInputUpdatesOnKeyPress(t *testing.T) {
 	}
 	if model.mode != modeCreateVault {
 		t.Fatalf("mode = %v, want modeCreateVault", model.mode)
+	}
+}
+
+// ── P1-7: Fuzzy Vault Picker Tests ──
+
+func TestCtrlVEntersVaultPickerMode(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.vaults = []string{allVaultsLabel, "default", "prod"}
+	m.entries = []entry{{Vault: "default", Key: "A"}, {Vault: "prod", Key: "B"}}
+	m.applyFilters()
+	m.loading = false
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlV})
+	model := updated.(Model)
+	if model.mode != modeVaultPicker {
+		t.Fatalf("mode after Ctrl+V = %v, want modeVaultPicker", model.mode)
+	}
+	if cmd == nil {
+		t.Fatal("expected textinput.Blink command")
+	}
+	if model.vaultPickerInput.Value() != "" {
+		t.Fatalf("vault picker input should be empty, got %q", model.vaultPickerInput.Value())
+	}
+}
+
+func TestVaultPickerEscCancels(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.mode = modeVaultPicker
+	m.vaultPickerInput.SetValue("pro")
+	m.vaultPickerInput.Focus()
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+	if model.mode != modeBrowse {
+		t.Fatalf("mode after Esc in vault picker = %v, want modeBrowse", model.mode)
+	}
+}
+
+func TestVaultPickerEnterSelectsVault(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.vaults = []string{allVaultsLabel, "default", "prod", "staging"}
+	m.entries = []entry{
+		{Vault: "default", Key: "A"},
+		{Vault: "prod", Key: "B"},
+		{Vault: "staging", Key: "C"},
+	}
+	m.applyFilters()
+	m.mode = modeVaultPicker
+	m.vaultPickerInput.SetValue("prod")
+	m.vaultPickerInput.Focus()
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+	if model.mode != modeBrowse {
+		t.Fatalf("mode after Enter in vault picker = %v, want modeBrowse", model.mode)
+	}
+	if model.currentFilter != "prod" {
+		t.Fatalf("currentFilter = %q, want prod", model.currentFilter)
+	}
+}
+
+func TestVaultPickerFuzzyMatchesFirst(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.vaults = []string{allVaultsLabel, "default", "production", "personal"}
+	m.entries = []entry{
+		{Vault: "default", Key: "A"},
+		{Vault: "production", Key: "B"},
+		{Vault: "personal", Key: "C"},
+	}
+	m.applyFilters()
+	m.mode = modeVaultPicker
+	m.vaultPickerInput.SetValue("pro")
+	m.vaultPickerInput.Focus()
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+	if model.currentFilter != "production" {
+		t.Fatalf("currentFilter = %q, want production (best fuzzy match for 'pro')", model.currentFilter)
+	}
+}
+
+func TestVaultPickerEmptyInputSelectsNothing(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.vaults = []string{allVaultsLabel, "default", "prod"}
+	m.currentFilter = "default"
+	m.mode = modeVaultPicker
+	m.vaultPickerInput.SetValue("")
+	m.vaultPickerInput.Focus()
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+	if model.mode != modeBrowse {
+		t.Fatalf("mode = %v, want modeBrowse", model.mode)
+	}
+	if model.currentFilter != "default" {
+		t.Fatalf("currentFilter should remain %q, got %q", "default", model.currentFilter)
+	}
+}
+
+func TestVaultPickerViewRendersOverlay(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.vaults = []string{allVaultsLabel, "default", "prod"}
+	m.entries = []entry{
+		{Vault: "default", Key: "A"},
+		{Vault: "default", Key: "B"},
+		{Vault: "prod", Key: "C"},
+	}
+	m.mode = modeVaultPicker
+	m.vaultPickerInput.SetValue("")
+	output := m.vaultPickerView()
+	for _, want := range []string{"Switch Vault", "default", "prod", "2 keys", "1 key"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("vaultPickerView missing %q, got: %q", want, output)
+		}
+	}
+}
+
+func TestVaultPickerShowsInRightPanel(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.vaults = []string{allVaultsLabel, "default", "prod"}
+	m.entries = []entry{{Vault: "default", Key: "A"}}
+	m.applyFilters()
+	m.mode = modeVaultPicker
+	m.loading = false
+	m.width = 80
+	m.height = 24
+	output := m.View()
+	if !strings.Contains(output, "Switch Vault") {
+		t.Fatalf("View() in modeVaultPicker missing 'Switch Vault', got: %q", output)
+	}
+}
+
+func TestVaultPickerInputUpdatesOnKeyPress(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.mode = modeVaultPicker
+	m.vaultPickerInput.Focus()
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	model := updated.(Model)
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	model = updated.(Model)
+
+	if model.vaultPickerInput.Value() != "st" {
+		t.Fatalf("vault picker input = %q, want st", model.vaultPickerInput.Value())
+	}
+	if model.mode != modeVaultPicker {
+		t.Fatalf("mode = %v, want modeVaultPicker", model.mode)
+	}
+}
+
+func TestVaultPickerNoMatchKeepsCurrentFilter(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.vaults = []string{allVaultsLabel, "default", "prod"}
+	m.currentFilter = "default"
+	m.mode = modeVaultPicker
+	m.vaultPickerInput.SetValue("zzzzz")
+	m.vaultPickerInput.Focus()
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+	if model.currentFilter != "default" {
+		t.Fatalf("currentFilter should remain %q on no match, got %q", "default", model.currentFilter)
 	}
 }

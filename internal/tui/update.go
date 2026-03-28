@@ -113,6 +113,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleHelpKey(msg)
 	case modeCreateVault:
 		return m.handleCreateVaultKey(msg)
+	case modeVaultPicker:
+		return m.handleVaultPickerKey(msg)
 	}
 
 	switch {
@@ -133,6 +135,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeCreateVault
 		m.vaultNameInput.SetValue("")
 		m.vaultNameInput.Focus()
+		return m, textinput.Blink
+	case key.Matches(msg, m.keys.VaultPicker):
+		m.mode = modeVaultPicker
+		m.vaultPickerInput.SetValue("")
+		m.vaultPickerInput.Focus()
 		return m, textinput.Blink
 	case msg.String() >= "1" && msg.String() <= "9":
 		idx := int(msg.String()[0] - '1')
@@ -308,6 +315,32 @@ func (m Model) handleCreateVaultKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	m.vaultNameInput, cmd = m.vaultNameInput.Update(msg)
+	return m, cmd
+}
+
+func (m Model) handleVaultPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if key.Matches(msg, m.keys.Cancel) {
+		m.mode = modeBrowse
+		m.vaultPickerInput.Blur()
+		return m, nil
+	}
+	if key.Matches(msg, m.keys.Confirm) {
+		query := strings.TrimSpace(m.vaultPickerInput.Value())
+		m.vaultPickerInput.Blur()
+		m.mode = modeBrowse
+		if query == "" {
+			return m, nil
+		}
+		matched := m.fuzzyMatchVault(query)
+		if matched != "" {
+			m.currentFilter = matched
+			m.clearPreview()
+			m.applyFilters()
+		}
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.vaultPickerInput, cmd = m.vaultPickerInput.Update(msg)
 	return m, cmd
 }
 

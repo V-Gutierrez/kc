@@ -81,7 +81,7 @@ func (m *mockKC) ListMetadata(service string) ([]keychain.ItemMetadata, error) {
 	}
 	items := make([]keychain.ItemMetadata, 0, len(svc))
 	for key := range svc {
-		items = append(items, keychain.ItemMetadata{Account: key, Protected: m.protected[service][key]})
+		items = append(items, keychain.ItemMetadata{Account: key, Protected: m.protected[service][key], Modified: "2024-02-18 12:14"})
 	}
 	return items, nil
 }

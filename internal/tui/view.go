@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/sahilm/fuzzy"
 )
 
 func (m Model) View() string {
@@ -42,6 +43,9 @@ func (m Model) View() string {
 	}
 	if m.mode == modeCreateVault {
 		right = m.createVaultView()
+	}
+	if m.mode == modeVaultPicker {
+		right = m.vaultPickerView()
 	}
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top,
@@ -104,6 +108,8 @@ func (m Model) contextualHints() string {
 		return "? or Esc close help"
 	case modeCreateVault:
 		return "Enter create • Esc cancel"
+	case modeVaultPicker:
+		return "Enter select • Esc cancel"
 	}
 	return "/ search  : cmd  ? help"
 }
@@ -192,6 +198,9 @@ func (m Model) previewView() string {
 			"",
 			m.styles.subtle.Render("Protection"),
 			m.styles.normal.Render(protection),
+			"",
+			m.styles.subtle.Render("Modified"),
+			m.styles.normal.Render(renderModified(item.Modified)),
 			"",
 			m.styles.subtle.Render("─── Actions ───"),
 			m.styles.help.Render("[Enter] Reveal  [c] Copy  [e] Edit  [d] Delete"),
@@ -395,6 +404,56 @@ func (m Model) createVaultView() string {
 	return m.styles.overlay.Render(strings.Join(content, "\n"))
 }
 
+func (m Model) vaultPickerView() string {
+	query := strings.TrimSpace(m.vaultPickerInput.Value())
+	realVaults := m.vaultHints()
+
+	type vaultRow struct {
+		name  string
+		count int
+	}
+
+	var filtered []vaultRow
+	if query == "" {
+		for _, v := range realVaults {
+			filtered = append(filtered, vaultRow{name: v, count: m.vaultKeyCount(v)})
+		}
+	} else {
+		matches := fuzzy.Find(strings.ToLower(query), realVaults)
+		for _, match := range matches {
+			v := realVaults[match.Index]
+			filtered = append(filtered, vaultRow{name: v, count: m.vaultKeyCount(v)})
+		}
+	}
+
+	content := []string{
+		m.styles.header.Render("Switch Vault"),
+		"",
+		m.vaultPickerInput.View(),
+		"",
+	}
+
+	if len(filtered) == 0 {
+		content = append(content, m.styles.subtle.Render("No matching vaults"))
+	} else {
+		for _, row := range filtered {
+			label := "keys"
+			if row.count == 1 {
+				label = "key"
+			}
+			line := fmt.Sprintf("  %s  (%d %s)", row.name, row.count, label)
+			if row.name == m.currentFilter {
+				content = append(content, m.styles.selected.Render(line))
+			} else {
+				content = append(content, m.styles.normal.Render(line))
+			}
+		}
+	}
+
+	content = append(content, "", m.styles.activeHelp.Render("Enter: select | Esc: cancel"))
+	return m.styles.overlay.Render(strings.Join(content, "\n"))
+}
+
 func maskedValue(item entry, preview previewState) string {
 	if preview.revealed && preview.vault == item.Vault && preview.key == item.Key {
 		trimmed := strings.TrimSpace(preview.value)
@@ -415,6 +474,13 @@ func protectionLabel(protection string) string {
 	default:
 		return "🔐 Protected"
 	}
+}
+
+func renderModified(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "Unknown"
+	}
+	return value
 }
 
 func chiefsBorder(width int, styles styles) string {

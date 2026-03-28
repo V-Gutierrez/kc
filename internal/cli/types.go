@@ -6,6 +6,7 @@ type SecretMetadata struct {
 	Key        string
 	Vault      string
 	Protection string
+	Modified   string
 }
 
 const (

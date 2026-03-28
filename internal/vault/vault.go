@@ -45,6 +45,7 @@ type KeychainBackend interface {
 type SecretMetadata struct {
 	Key        string
 	Protection string
+	Modified   string
 }
 
 const (
@@ -344,7 +345,7 @@ func (m *Manager) ListKeyMetadata(vaultName string) ([]SecretMetadata, error) {
 		if item.Protected {
 			protection = ProtectionProtected
 		}
-		result = append(result, SecretMetadata{Key: item.Account, Protection: protection})
+		result = append(result, SecretMetadata{Key: item.Account, Protection: protection, Modified: item.Modified})
 	}
 	return result, nil
 }

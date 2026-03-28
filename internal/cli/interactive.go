@@ -23,6 +23,7 @@ func (a tuiStoreAdapter) ListMetadata(vault string) ([]tui.SecretMetadata, error
 			Key:        m.Key,
 			Vault:      m.Vault,
 			Protection: m.Protection,
+			Modified:   m.Modified,
 		}
 	}
 	return out, nil
