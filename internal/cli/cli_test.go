@@ -762,7 +762,7 @@ func TestRootHelp(t *testing.T) {
 		t.Errorf("help output should mention 'kc'")
 	}
 	// Verify all subcommands are listed.
-	for _, sub := range []string{"get", "set", "del", "list", "vault"} {
+	for _, sub := range []string{"get", "set", "del", "list", "vault", "audit"} {
 		if !strings.Contains(stdout, sub) {
 			t.Errorf("help output missing subcommand %q", sub)
 		}

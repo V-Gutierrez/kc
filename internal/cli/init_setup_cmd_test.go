@@ -106,8 +106,11 @@ func TestSetupMigratesZshSecretsAndInjectsSnippet(t *testing.T) {
 	if !strings.Contains(stdout, "API_KEY") || !strings.Contains(stdout, "AWS_SECRET_ACCESS_KEY") {
 		t.Fatalf("stdout = %q, want detected secret names", stdout)
 	}
-	if !strings.Contains(stdout, "✅ 2 secrets migrated. Restart your shell.") {
-		t.Fatalf("stdout = %q, want migration summary", stdout)
+	if !strings.Contains(stdout, "✅ 2 secrets migrated") {
+		t.Fatalf("stdout = %q, want migration summary with vault", stdout)
+	}
+	if !strings.Contains(stdout, "Restart your shell") {
+		t.Fatalf("stdout = %q, want kc run guidance", stdout)
 	}
 
 	if got, _ := store.Get("default", "API_KEY"); got != "sk-test-123" {
@@ -132,7 +135,7 @@ func TestSetupMigratesZshSecretsAndInjectsSnippet(t *testing.T) {
 		t.Fatalf("updated rc missing load wrapper: %q", updated)
 	}
 	if !strings.Contains(updated, "eval \"$(command kc env)\"") {
-		t.Fatalf("updated rc missing env snippet: %q", updated)
+		t.Fatalf("updated rc missing env eval: %q", updated)
 	}
 	if !strings.Contains(updated, "source <(command kc completion zsh)") {
 		t.Fatalf("updated rc missing completion snippet: %q", updated)
@@ -199,7 +202,7 @@ func TestSetupFishWritesConfDFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(stdout, "✅ 1 secrets migrated. Restart your shell.") {
+	if !strings.Contains(stdout, "✅ 1 secrets migrated") {
 		t.Fatalf("stdout = %q, want fish migration summary", stdout)
 	}
 	if got, _ := store.Get("default", "OPENAI_API_KEY"); got != "sk-fish-123" {
@@ -248,7 +251,7 @@ func TestSetupWithoutSecretsStillInstallsInitSnippet(t *testing.T) {
 		t.Fatalf("updated rc missing load wrapper: %q", updated)
 	}
 	if !strings.Contains(updated, "eval \"$(command kc env)\"") {
-		t.Fatalf("updated rc missing env snippet: %q", updated)
+		t.Fatalf("updated rc missing env eval: %q", updated)
 	}
 	if !strings.Contains(updated, "source <(command kc completion zsh)") {
 		t.Fatalf("updated rc missing completion snippet: %q", updated)

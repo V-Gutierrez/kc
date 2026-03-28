@@ -100,4 +100,7 @@ func TestCompletionInHelp(t *testing.T) {
 	if !strings.Contains(stdout, "completion") {
 		t.Fatal("completion subcommand missing from help output")
 	}
+	if !strings.Contains(stdout, "audit") {
+		t.Fatal("audit subcommand missing from help output")
+	}
 }

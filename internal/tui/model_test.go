@@ -525,6 +525,11 @@ func TestCopyFlashMessageBehavior(t *testing.T) {
 	}
 
 	msg := cmd()
+	if copied, ok := msg.(copiedMsg); ok {
+		if copied.entry.Key == "" {
+			t.Fatalf("copiedMsg should carry the entry key, got empty")
+		}
+	}
 	updated, cmd = model.Update(msg)
 	model = updated.(Model)
 
@@ -712,7 +717,7 @@ func TestDoubleYYCopiesSelectedEntry(t *testing.T) {
 	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 	model = updated.(Model)
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
-	model = updated.(Model)
+	_ = updated.(Model)
 	if cmd == nil {
 		t.Fatal("expected copy cmd from yy")
 	}
@@ -728,18 +733,14 @@ func TestDoubleCCEntersEditMode(t *testing.T) {
 	updated, _ := m.Update(loadedMsg{items: []entry{{Vault: "default", Key: "TOKEN", Protection: protectionProtected}}, activeVault: "default"})
 	model := updated.(Model)
 
-	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	// 'e' is the edit key (single press)
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
 	model = updated.(Model)
 	if cmd == nil {
-		t.Fatal("expected immediate copy command from first c")
-	}
-	updated, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	model = updated.(Model)
-	if cmd == nil {
-		t.Fatal("expected blink cmd from cc")
+		t.Fatal("expected blink cmd from e (edit key)")
 	}
 	if model.mode != modeEdit {
-		t.Fatalf("mode after cc = %v, want modeEdit", model.mode)
+		t.Fatalf("mode after e = %v, want modeEdit", model.mode)
 	}
 }
 
@@ -783,12 +784,29 @@ func TestSingleCTimeoutStillCopies(t *testing.T) {
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
 	model = updated.(Model)
 	if cmd == nil {
-		t.Fatal("expected copy command from first c")
+		t.Fatal("expected timeout command from first c")
 	}
 	updated, _ = model.Update(cmd())
 	_ = updated.(Model)
 	if len(clipboard.values) != 1 || clipboard.values[0] != "secret" {
 		t.Fatalf("clipboard values = %v, want [secret]", clipboard.values)
+	}
+}
+
+func TestCommandPaletteVaultWithoutArgOpensPicker(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	updated, _ := m.Update(loadedMsg{vaults: []string{"default", "prod"}, activeVault: "default", items: []entry{{Vault: "default", Key: "A"}, {Vault: "prod", Key: "B"}}})
+	model := updated.(Model)
+	model.mode = modeCommandPalette
+	model.commandInput.SetValue("vault")
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(Model)
+	if model.mode != modeVaultPicker {
+		t.Fatalf("mode = %v, want modeVaultPicker", model.mode)
+	}
+	if cmd == nil {
+		t.Fatal("expected blink cmd when opening vault picker from palette")
 	}
 }
 
