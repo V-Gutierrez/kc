@@ -129,10 +129,77 @@ func TestAlternatingRowsRenderDifferently(t *testing.T) {
 	}
 }
 
-func TestStatusViewDefault(t *testing.T) {
+func TestStatusViewDefaultShowsBreadcrumbBar(t *testing.T) {
 	m := NewModel(Deps{Store: newMockStore()})
-	if got := m.statusView(); !strings.Contains(got, "Ready") {
-		t.Fatalf("statusView = %q, want Ready", got)
+	got := m.statusView()
+	if !strings.Contains(got, "/ search") || !strings.Contains(got, "? help") {
+		t.Fatalf("statusView = %q, want contextual hints", got)
+	}
+}
+
+func TestStatusBarBreadcrumbShowsVaultCategoryKey(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.activeVault = "default"
+	m.currentFilter = "default"
+	m.entries = []entry{{Vault: "default", Key: "AWS_API_KEY", Protection: protectionProtected}}
+	m.applyFilters()
+	m.list.Select(0)
+
+	output := m.statusView()
+	// Breadcrumb must contain vault, category (prefix), and key
+	for _, want := range []string{"default", "AWS", "AWS_API_KEY"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("statusBar breadcrumb missing %q, got: %q", want, output)
+		}
+	}
+}
+
+func TestStatusBarBreadcrumbShowsVaultOnlyWhenNoSelection(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.activeVault = "prod"
+	m.currentFilter = "prod"
+	// No entries, no selection
+
+	output := m.statusView()
+	if !strings.Contains(output, "prod") {
+		t.Fatalf("statusBar missing vault name, got: %q", output)
+	}
+}
+
+func TestStatusBarBreadcrumbAllVaultsLabel(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.activeVault = "default"
+	m.currentFilter = allVaultsLabel
+
+	output := m.statusView()
+	// When filter is "All vaults", show active vault name
+	if !strings.Contains(output, "default") {
+		t.Fatalf("statusBar missing active vault in All vaults mode, got: %q", output)
+	}
+}
+
+func TestStatusBarShowsContextualHints(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.activeVault = "default"
+	m.currentFilter = "default"
+
+	output := m.statusView()
+	// Should contain contextual keybind hints on the right
+	for _, want := range []string{"/ search", "? help"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("statusBar missing contextual hint %q, got: %q", want, output)
+		}
+	}
+}
+
+func TestStatusBarFlashOverridesBreadcrumb(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.flashMessage = "✓ Copied to clipboard"
+	m.activeVault = "default"
+
+	output := m.statusView()
+	if !strings.Contains(output, "Copied to clipboard") {
+		t.Fatalf("statusBar should show flash message, got: %q", output)
 	}
 }
 
@@ -187,4 +254,3 @@ func TestHelpViewContainsBindings(t *testing.T) {
 		}
 	}
 }
-

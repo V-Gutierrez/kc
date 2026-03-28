@@ -50,11 +50,51 @@ func (m Model) statusView() string {
 	if m.flashMessage != "" {
 		return m.styles.flash.Render(m.flashMessage)
 	}
-	status := m.status
-	if status == "" {
-		status = "Ready"
+
+	breadcrumb := m.breadcrumb()
+	hints := m.contextualHints()
+
+	barWidth := max(m.width-4, 40)
+	left := m.styles.breadcrumb.Render(breadcrumb)
+	right := m.styles.statusHint.Render(hints)
+
+	gap := barWidth - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 1 {
+		gap = 1
 	}
-	return m.styles.status.Render(status)
+	padding := strings.Repeat(" ", gap)
+
+	return m.styles.statusBar.Render(left + padding + right)
+}
+
+func (m Model) breadcrumb() string {
+	vault := m.currentFilter
+	if vault == allVaultsLabel {
+		vault = m.activeVault
+	}
+
+	selected, ok := m.selectedEntry()
+	if !ok {
+		return vault
+	}
+
+	category := strings.ToUpper(prefixOf(selected.Key))
+	if category == "OTHER" {
+		return vault + " > " + selected.Key
+	}
+	return vault + " > " + category + " > " + selected.Key
+}
+
+func (m Model) contextualHints() string {
+	switch m.mode {
+	case modeSearch:
+		return "Enter confirm • Esc cancel"
+	case modeAdd, modeEdit:
+		return "Tab next • Esc cancel • Enter confirm"
+	case modeConfirmDelete:
+		return "y confirm • n cancel"
+	}
+	return "/ search  : cmd  ? help"
 }
 
 func (m Model) headerView() string {

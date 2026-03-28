@@ -36,6 +36,9 @@ type styles struct {
 	activeHelp    lipgloss.Style
 	vaultOption   lipgloss.Style
 	vaultDefault  lipgloss.Style
+	breadcrumb    lipgloss.Style
+	statusBar     lipgloss.Style
+	statusHint    lipgloss.Style
 }
 
 func newStyles() styles {
@@ -78,6 +81,9 @@ func newStyles() styles {
 		activeHelp:    lipgloss.NewStyle().Foreground(chiefsGold),
 		vaultOption:   lipgloss.NewStyle().Foreground(lipgloss.Color("252")),
 		vaultDefault:  lipgloss.NewStyle().Foreground(chiefsGold).Bold(true),
+		breadcrumb:    lipgloss.NewStyle().Foreground(chiefsGold).Bold(true),
+		statusBar:     lipgloss.NewStyle().Background(chiefsDark).Padding(0, 1),
+		statusHint:    lipgloss.NewStyle().Foreground(muted),
 	}
 }
 
