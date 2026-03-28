@@ -42,6 +42,7 @@ type Vaults interface {
 	List() ([]string, error)
 	Active() (string, error)
 	Switch(name string) error
+	Create(name string) error
 }
 
 type Clipboard interface {
@@ -78,6 +79,7 @@ const (
 	modeEdit
 	modeConfirmDelete
 	modeHelp
+	modeCreateVault
 )
 
 type previewState struct {
@@ -131,30 +133,35 @@ type hideMsg struct {
 	token int
 }
 
+type vaultCreatedMsg struct {
+	name string
+}
+
 type errMsg struct{ err error }
 
 type Model struct {
-	deps          Deps
-	list          list.Model
-	search        textinput.Model
-	keys          keyMap
-	styles        styles
-	entries       []entry
-	vaults        []string
-	currentFilter string
-	activeVault   string
-	mode          mode
-	preview       previewState
-	form          formState
-	loading       bool
-	status        string
-	flashMessage  string
-	flashToken    int
-	err           error
-	width         int
-	height        int
-	revealToken   int
-	delegate      itemDelegate
+	deps           Deps
+	list           list.Model
+	search         textinput.Model
+	vaultNameInput textinput.Model
+	keys           keyMap
+	styles         styles
+	entries        []entry
+	vaults         []string
+	currentFilter  string
+	activeVault    string
+	mode           mode
+	preview        previewState
+	form           formState
+	loading        bool
+	status         string
+	flashMessage   string
+	flashToken     int
+	err            error
+	width          int
+	height         int
+	revealToken    int
+	delegate       itemDelegate
 }
 
 func NewModel(deps Deps) Model {
@@ -165,14 +172,21 @@ func NewModel(deps Deps) Model {
 	search.Width = 32
 	search.Prompt = "search> "
 
+	vaultInput := textinput.New()
+	vaultInput.Placeholder = "vault-name"
+	vaultInput.CharLimit = 64
+	vaultInput.Width = 24
+	vaultInput.Prompt = "new vault> "
+
 	m := Model{
-		deps:          deps,
-		keys:          defaultKeyMap(),
-		styles:        styles,
-		search:        search,
-		currentFilter: allVaultsLabel,
-		mode:          modeBrowse,
-		loading:       true,
+		deps:           deps,
+		keys:           defaultKeyMap(),
+		styles:         styles,
+		search:         search,
+		vaultNameInput: vaultInput,
+		currentFilter:  allVaultsLabel,
+		mode:           modeBrowse,
+		loading:        true,
 	}
 	delegate := itemDelegate{styles: &m.styles, model: &m}
 	m.delegate = delegate

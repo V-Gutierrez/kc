@@ -73,6 +73,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = fmt.Sprintf("Deleted %s from %s", msg.entry.Key, msg.entry.Vault)
 		m.applyFilters()
 		return m, nil
+	case vaultCreatedMsg:
+		m.vaults = append(m.vaults, msg.name)
+		m.currentFilter = msg.name
+		m.mode = modeBrowse
+		m.flashToken++
+		m.flashMessage = fmt.Sprintf("✓ Created vault %s", msg.name)
+		m.clearPreview()
+		m.applyFilters()
+		return m, tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
+			return clearFlashMsg{token: m.flashToken}
+		})
 	case errMsg:
 		m.err = msg.err
 		m.status = ""
@@ -100,6 +111,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleDeleteConfirm(msg)
 	case modeHelp:
 		return m.handleHelpKey(msg)
+	case modeCreateVault:
+		return m.handleCreateVaultKey(msg)
 	}
 
 	switch {
@@ -116,6 +129,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.VaultPrev):
 		m.cycleVaultFilterReverse()
 		return m, nil
+	case key.Matches(msg, m.keys.CreateVault):
+		m.mode = modeCreateVault
+		m.vaultNameInput.SetValue("")
+		m.vaultNameInput.Focus()
+		return m, textinput.Blink
 	case msg.String() >= "1" && msg.String() <= "9":
 		idx := int(msg.String()[0] - '1')
 		m.selectVaultByIndex(idx)
@@ -270,6 +288,27 @@ func (m Model) handleHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+func (m Model) handleCreateVaultKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if key.Matches(msg, m.keys.Cancel) {
+		m.mode = modeBrowse
+		m.vaultNameInput.Blur()
+		return m, nil
+	}
+	if key.Matches(msg, m.keys.Confirm) {
+		name := strings.TrimSpace(m.vaultNameInput.Value())
+		if name == "" {
+			m.mode = modeBrowse
+			m.vaultNameInput.Blur()
+			return m, nil
+		}
+		m.vaultNameInput.Blur()
+		return m, createVaultCmd(m.deps, name)
+	}
+	var cmd tea.Cmd
+	m.vaultNameInput, cmd = m.vaultNameInput.Update(msg)
+	return m, cmd
 }
 
 func (m Model) submitForm() (Model, tea.Cmd) {

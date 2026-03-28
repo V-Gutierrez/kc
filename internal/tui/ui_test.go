@@ -471,3 +471,168 @@ func TestHelpOverlayBlocksOtherKeys(t *testing.T) {
 		t.Fatal("d should not produce a command in help overlay")
 	}
 }
+
+// ── P1-6: Vault Creation Tests ──
+
+func TestCtrlNEntersCreateVaultMode(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.entries = []entry{{Vault: "default", Key: "TOKEN"}}
+	m.applyFilters()
+	m.loading = false
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
+	model := updated.(Model)
+	if model.mode != modeCreateVault {
+		t.Fatalf("mode after Ctrl+N = %v, want modeCreateVault", model.mode)
+	}
+	if cmd == nil {
+		t.Fatal("expected textinput.Blink command")
+	}
+	if model.vaultNameInput.Value() != "" {
+		t.Fatalf("vault name input should be empty, got %q", model.vaultNameInput.Value())
+	}
+}
+
+func TestCreateVaultEscCancels(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.mode = modeCreateVault
+	m.vaultNameInput.SetValue("new-vault")
+	m.vaultNameInput.Focus()
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := updated.(Model)
+	if model.mode != modeBrowse {
+		t.Fatalf("mode after Esc in create vault = %v, want modeBrowse", model.mode)
+	}
+}
+
+func TestCreateVaultEmptyNameCancels(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.mode = modeCreateVault
+	m.vaultNameInput.SetValue("")
+	m.vaultNameInput.Focus()
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+	if model.mode != modeBrowse {
+		t.Fatalf("mode after Enter with empty name = %v, want modeBrowse", model.mode)
+	}
+	if cmd != nil {
+		t.Fatal("empty name should not produce a create command")
+	}
+}
+
+func TestCreateVaultSubmitCallsCreateCmd(t *testing.T) {
+	vaults := &mockVaults{list: []string{"default"}, active: "default"}
+	m := NewModel(Deps{Store: newMockStore(), Vaults: vaults})
+	m.mode = modeCreateVault
+	m.vaultNameInput.SetValue("staging")
+	m.vaultNameInput.Focus()
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+	_ = model
+	if cmd == nil {
+		t.Fatal("expected createVaultCmd")
+	}
+
+	msg := cmd()
+	created, ok := msg.(vaultCreatedMsg)
+	if !ok {
+		t.Fatalf("cmd returned %T, want vaultCreatedMsg", msg)
+	}
+	if created.name != "staging" {
+		t.Fatalf("created vault name = %q, want staging", created.name)
+	}
+	if len(vaults.createCalls) != 1 || vaults.createCalls[0] != "staging" {
+		t.Fatalf("create calls = %v, want [staging]", vaults.createCalls)
+	}
+}
+
+func TestVaultCreatedMsgAddsVaultAndSwitchesFilter(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.vaults = []string{allVaultsLabel, "default"}
+	m.currentFilter = "default"
+	m.entries = []entry{{Vault: "default", Key: "TOKEN"}}
+	m.applyFilters()
+
+	updated, cmd := m.Update(vaultCreatedMsg{name: "staging"})
+	model := updated.(Model)
+	if model.mode != modeBrowse {
+		t.Fatalf("mode after vaultCreatedMsg = %v, want modeBrowse", model.mode)
+	}
+	if model.currentFilter != "staging" {
+		t.Fatalf("currentFilter = %q, want staging", model.currentFilter)
+	}
+	found := false
+	for _, v := range model.vaults {
+		if v == "staging" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("vaults = %v, missing staging", model.vaults)
+	}
+	if !strings.Contains(model.flashMessage, "Created vault staging") {
+		t.Fatalf("flash = %q, want 'Created vault staging'", model.flashMessage)
+	}
+	if cmd == nil {
+		t.Fatal("expected flash clear tick command")
+	}
+}
+
+func TestCreateVaultViewRendersOverlay(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.mode = modeCreateVault
+	m.vaultNameInput.SetValue("test-vault")
+	output := m.createVaultView()
+	for _, want := range []string{"Create Vault", "Name", "Enter: create", "Esc: cancel"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("createVaultView missing %q, got: %q", want, output)
+		}
+	}
+}
+
+func TestCreateVaultViewShowsInRightPanel(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.vaults = []string{allVaultsLabel, "default"}
+	m.currentFilter = "default"
+	m.entries = []entry{{Vault: "default", Key: "TOKEN"}}
+	m.applyFilters()
+	m.mode = modeCreateVault
+	m.loading = false
+	m.width = 80
+	m.height = 24
+	output := m.View()
+	if !strings.Contains(output, "Create Vault") {
+		t.Fatalf("View() in modeCreateVault missing 'Create Vault', got: %q", output)
+	}
+}
+
+func TestContextualHintsForCreateVaultMode(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.mode = modeCreateVault
+	hints := m.contextualHints()
+	if !strings.Contains(hints, "Enter create") || !strings.Contains(hints, "Esc cancel") {
+		t.Fatalf("contextualHints for modeCreateVault = %q, want Enter/Esc hints", hints)
+	}
+}
+
+func TestCreateVaultInputUpdatesOnKeyPress(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.mode = modeCreateVault
+	m.vaultNameInput.Focus()
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	model := updated.(Model)
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	model = updated.(Model)
+
+	if model.vaultNameInput.Value() != "pr" {
+		t.Fatalf("vault name input = %q, want pr", model.vaultNameInput.Value())
+	}
+	if model.mode != modeCreateVault {
+		t.Fatalf("mode = %v, want modeCreateVault", model.mode)
+	}
+}

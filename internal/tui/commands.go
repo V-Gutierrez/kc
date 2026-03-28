@@ -91,3 +91,12 @@ func deleteCmd(deps Deps, item entry) tea.Cmd {
 		return deletedMsg{entry: item}
 	}
 }
+
+func createVaultCmd(deps Deps, name string) tea.Cmd {
+	return func() tea.Msg {
+		if err := deps.Vaults.Create(name); err != nil {
+			return errMsg{err: err}
+		}
+		return vaultCreatedMsg{name: name}
+	}
+}

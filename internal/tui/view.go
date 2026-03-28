@@ -40,6 +40,9 @@ func (m Model) View() string {
 	if m.mode == modeHelp {
 		right = m.helpOverlayView()
 	}
+	if m.mode == modeCreateVault {
+		right = m.createVaultView()
+	}
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top,
 		lipgloss.NewStyle().Width(max(40, m.width/2)).Render(left),
@@ -99,6 +102,8 @@ func (m Model) contextualHints() string {
 		return "y confirm • n cancel"
 	case modeHelp:
 		return "? or Esc close help"
+	case modeCreateVault:
+		return "Enter create • Esc cancel"
 	}
 	return "/ search  : cmd  ? help"
 }
@@ -374,6 +379,20 @@ func (m Model) helpOverlayView() string {
 	}
 	lines = append(lines, m.styles.subtle.Render("Press ? or Esc to close"))
 	return m.styles.helpOverlay.Render(strings.Join(lines, "\n"))
+}
+
+func (m Model) createVaultView() string {
+	content := []string{
+		m.styles.header.Render("Create Vault"),
+		"",
+		m.styles.previewTitle.Render("Name"),
+		m.vaultNameInput.View(),
+		"",
+		m.styles.subtle.Render("Use lowercase alphanumeric, dash, or underscore"),
+		"",
+		m.styles.activeHelp.Render("Enter: create | Esc: cancel"),
+	}
+	return m.styles.overlay.Render(strings.Join(content, "\n"))
 }
 
 func maskedValue(item entry, preview previewState) string {
