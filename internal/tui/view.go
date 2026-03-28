@@ -1,0 +1,280 @@
+package tui
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
+
+func (m Model) View() string {
+	if m.loading {
+		banner := m.styles.banner.Render(kcBanner)
+		content := lipgloss.JoinVertical(
+			lipgloss.Center,
+			banner,
+			"",
+			m.styles.loading.Render("Loading vaults and keys..."),
+		)
+		width := max(m.width, 80)
+		height := max(m.height, 24)
+		return m.styles.app.Render(lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, content))
+	}
+
+	if len(m.entries) == 0 && m.err == nil {
+		return m.welcomeView()
+	}
+
+	left := lipgloss.JoinVertical(lipgloss.Left,
+		m.headerView(),
+		m.searchView(),
+		m.list.View(),
+		m.helpView(),
+	)
+
+	right := m.previewView()
+	if m.mode == modeAdd || m.mode == modeEdit || m.mode == modeConfirmDelete {
+		right = m.overlayView()
+	}
+
+	body := lipgloss.JoinHorizontal(lipgloss.Top,
+		lipgloss.NewStyle().Width(max(40, m.width/2)).Render(left),
+		lipgloss.NewStyle().PaddingLeft(2).Width(max(30, m.width/2-4)).Render(right),
+	)
+
+	statusBar := m.statusView()
+	return m.styles.app.Render(lipgloss.JoinVertical(lipgloss.Left, body, "\n", statusBar))
+}
+
+func (m Model) statusView() string {
+	if m.flashMessage != "" {
+		return m.styles.flash.Render(m.flashMessage)
+	}
+	status := m.status
+	if status == "" {
+		status = "Ready"
+	}
+	return m.styles.status.Render(status)
+}
+
+func (m Model) headerView() string {
+	vault := m.currentFilter
+	if vault == allVaultsLabel {
+		vault = m.activeVault
+	}
+	count := len(m.list.Items())
+	label := "keys"
+	if count == 1 {
+		label = "key"
+	}
+	return m.styles.header.Render(fmt.Sprintf("🔒 kc • vault: %s • %d %s", vault, count, label))
+}
+
+func (m Model) searchView() string {
+	if m.mode != modeSearch && m.search.Value() == "" {
+		return m.styles.subtle.Render("Press / to search across visible keys")
+	}
+	count := len(m.list.Items())
+	suffix := " match"
+	if count != 1 {
+		suffix += "es"
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Left, m.search.View(), m.styles.subtle.Render(fmt.Sprintf(" (%d%s)", count, suffix)))
+}
+
+func (m Model) previewView() string {
+	lines := []string{chiefsBorder(max(18, m.width/2-10), m.styles), m.styles.header.Render("Preview")}
+	if item, ok := m.selectedEntry(); ok {
+		protection := protectionLabel(item.Protection)
+		lines = append(lines,
+			m.styles.subtle.Render("Key"),
+			m.styles.previewTitle.Render(item.Key),
+			"",
+			m.styles.subtle.Render("Vault"),
+			m.styles.normal.Render(item.Vault),
+			"",
+			m.styles.subtle.Render("Protection status"),
+			m.styles.normal.Render(protection),
+			"",
+			m.styles.subtle.Render("Value"),
+			m.styles.revealed.Render(maskedValue(item, m.preview)),
+		)
+	} else {
+		lines = append(lines, m.styles.subtle.Render("No key selected"))
+	}
+	if m.err != nil {
+		lines = append(lines, "", m.styles.error.Render(m.err.Error()))
+	}
+	return m.styles.preview.Render(strings.Join(lines, "\n"))
+}
+
+func (m Model) overlayView() string {
+	if m.mode == modeConfirmDelete {
+		item, _ := m.selectedEntry()
+		return m.styles.overlay.Render(
+			m.styles.header.Render("Delete key") + "\n\n" +
+				fmt.Sprintf("Delete %s from %s? (y/n)", item.Key, item.Vault),
+		)
+	}
+
+	if m.form.confirming {
+		vault := strings.TrimSpace(m.form.vault.Value())
+		if vault == "" {
+			vault = m.activeVault
+		}
+		key := strings.TrimSpace(m.form.key.Value())
+		prot := "🔐 protected"
+		if !m.form.isProtected {
+			prot = "🔓 unprotected"
+		}
+		return m.styles.overlay.Render(
+			m.styles.header.Render("Confirm Save") + "\n\n" +
+				fmt.Sprintf("Save %s to vault:%s (%s)?", key, vault, prot) + "\n\n" +
+				m.styles.help.Render("[Enter] confirm / [Esc] cancel"),
+		)
+	}
+
+	title := "Add key"
+	if m.mode == modeEdit {
+		title = "Edit key"
+	}
+
+	vaultVal := strings.TrimSpace(m.form.vault.Value())
+	if vaultVal == "" {
+		vaultVal = m.activeVault
+	}
+
+	vaultHint := m.styles.subtle.Render("(new vault)")
+	if m.vaultExists(vaultVal) {
+		vaultHint = m.styles.success.Render("existing vault")
+	}
+	vaultNames := m.vaultHints()
+	vaultList := m.vaultListView(vaultNames)
+
+	keyVal := strings.TrimSpace(m.form.key.Value())
+	keyNamingHint := m.styles.subtle.Render("Use UPPER_SNAKE_CASE")
+	keyWarning := ""
+	if keyVal != "" && m.keyExists(vaultVal, keyVal) && m.mode == modeAdd {
+		keyWarning = m.styles.warning.Render("⚠ Key exists, will overwrite")
+	}
+
+	protChecked := "[ ] "
+	if m.form.isProtected {
+		protChecked = "[x] "
+	}
+
+	protStyle := m.styles.normal
+	if m.form.focus == 3 {
+		protStyle = m.styles.selected
+	}
+
+	content := []string{
+		m.styles.header.Render(title),
+		"",
+		m.formLabel("Vault", 0),
+		m.form.vault.View(),
+		vaultList,
+		vaultHint,
+		"",
+		m.formLabel("Key", 1),
+		m.form.key.View(),
+		keyNamingHint,
+		keyWarning,
+		"",
+		m.formLabel("Value", 2) + m.styles.subtle.Render(" (F2 to reveal)"),
+		m.form.value.View(),
+		"",
+		protStyle.Render(protChecked+"Touch ID protected") + m.styles.subtle.Render(" (Space toggle)"),
+		"",
+		m.styles.activeHelp.Render("Tab: next field | Esc: cancel | Enter: confirm"),
+	}
+	return m.styles.overlay.Render(strings.Join(content, "\n"))
+}
+
+func (m Model) formLabel(label string, focus int) string {
+	if m.form.focus == focus {
+		return m.styles.focusedLabel.Render("→ " + label)
+	}
+	return m.styles.inactiveLabel.Render(label)
+}
+
+func (m Model) vaultListView(vaultNames []string) string {
+	if len(vaultNames) == 0 || m.form.focus != 0 {
+		return ""
+	}
+
+	lines := make([]string, 0, len(vaultNames)+1)
+	lines = append(lines, m.styles.activeHelp.Render("Available vaults:"))
+	for i, vault := range vaultNames {
+		if i >= 9 {
+			break
+		}
+		option := m.styles.vaultOption.Render(fmt.Sprintf("%d. %s", i+1, vault))
+		if vault == m.activeVault {
+			option = m.styles.vaultDefault.Render(fmt.Sprintf("%d. %s (default)", i+1, vault))
+		}
+		lines = append(lines, option)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) helpView() string {
+	parts := make([]string, 0, len(m.keys.ShortHelp()))
+	for _, binding := range m.keys.ShortHelp() {
+		help := binding.Help()
+		parts = append(parts, help.Key+" "+help.Desc)
+	}
+	return m.styles.help.Render(strings.Join(parts, " • "))
+}
+
+func (m Model) welcomeView() string {
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.styles.welcomeTitle.Render("No secrets yet! Get started:"),
+		"",
+		"  "+m.styles.welcomeKey.Render("kc set API_KEY")+"        "+m.styles.welcomeDesc.Render("Store a secret (Touch ID protected)"),
+		"  "+m.styles.welcomeKey.Render("kc import .env")+"        "+m.styles.welcomeDesc.Render("Import from .env file"),
+		"  "+m.styles.welcomeKey.Render("kc setup")+"              "+m.styles.welcomeDesc.Render("Migrate from your shell config"),
+		"",
+		m.styles.subtle.Render("Or press `a` to add a secret right here."),
+	)
+	return m.styles.app.Render(lipgloss.Place(max(m.width, 80), max(m.height, 24), lipgloss.Center, lipgloss.Center, m.styles.welcome.Render(content)))
+}
+
+func maskedValue(item entry, preview previewState) string {
+	if preview.revealed && preview.vault == item.Vault && preview.key == item.Key {
+		trimmed := strings.TrimSpace(preview.value)
+		if trimmed == "" {
+			return "[empty]"
+		}
+		return preview.value
+	}
+	return "••••••"
+}
+
+func protectionLabel(protection string) string {
+	switch strings.ToLower(strings.TrimSpace(protection)) {
+	case protectionUnprotected:
+		return "🔓 Unprotected"
+	case protectionProtected, "":
+		return "🔐 Protected"
+	default:
+		return "🔐 Protected"
+	}
+}
+
+func chiefsBorder(width int, styles styles) string {
+	if width < 6 {
+		width = 6
+	}
+	var b strings.Builder
+	for i := 0; i < width; i++ {
+		segment := "━"
+		if i%2 == 0 {
+			b.WriteString(styles.borderRed.Render(segment))
+			continue
+		}
+		b.WriteString(styles.borderGold.Render(segment))
+	}
+	return b.String()
+}
