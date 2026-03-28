@@ -36,7 +36,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.revealToken++
 		m.preview = previewState{vault: msg.entry.Vault, key: msg.entry.Key, value: msg.value, revealed: true}
 		m.status = fmt.Sprintf("Revealed %s from %s", msg.entry.Key, msg.entry.Vault)
-		return m, tea.Tick(10*time.Second, func(_ time.Time) tea.Msg {
+		return m, tea.Tick(5*time.Second, func(_ time.Time) tea.Msg {
 			return hideMsg{entry: msg.entry, token: m.revealToken}
 		})
 	case hideMsg:

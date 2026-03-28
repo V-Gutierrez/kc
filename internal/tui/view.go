@@ -131,18 +131,39 @@ func (m Model) previewView() string {
 	lines := []string{chiefsBorder(max(18, m.width/2-10), m.styles), m.styles.header.Render("Preview")}
 	if item, ok := m.selectedEntry(); ok {
 		protection := protectionLabel(item.Protection)
+		category := strings.ToUpper(prefixOf(item.Key))
+		valueDisplay := maskedValue(item, m.preview)
+		isRevealed := m.preview.revealed && m.preview.vault == item.Vault && m.preview.key == item.Key
+
 		lines = append(lines,
 			m.styles.subtle.Render("Key"),
 			m.styles.previewTitle.Render(item.Key),
 			"",
+			m.styles.subtle.Render("Value"),
+			m.styles.revealed.Render(valueDisplay),
+		)
+		if !isRevealed {
+			lines = append(lines, m.styles.subtle.Render("[Enter to reveal]"))
+		}
+		if isRevealed {
+			lines = append(lines, m.styles.subtle.Render(fmt.Sprintf("Size: %d chars", len(m.preview.value))))
+		}
+
+		lines = append(lines,
+			"",
+			m.styles.subtle.Render("─── Details ───"),
+			"",
 			m.styles.subtle.Render("Vault"),
 			m.styles.normal.Render(item.Vault),
 			"",
-			m.styles.subtle.Render("Protection status"),
+			m.styles.subtle.Render("Category"),
+			m.styles.normal.Render(category),
+			"",
+			m.styles.subtle.Render("Protection"),
 			m.styles.normal.Render(protection),
 			"",
-			m.styles.subtle.Render("Value"),
-			m.styles.revealed.Render(maskedValue(item, m.preview)),
+			m.styles.subtle.Render("─── Actions ───"),
+			m.styles.help.Render("[Enter] Reveal  [c] Copy  [e] Edit  [d] Delete"),
 		)
 	} else {
 		lines = append(lines, m.styles.subtle.Render("No key selected"))
