@@ -46,6 +46,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case copiedMsg:
+		m.recordCopy(msg.entry)
 		m.flashToken++
 		m.flashMessage = "✓ Copied to clipboard, auto-clears in 30s"
 		return m, tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
@@ -88,6 +89,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		m.status = ""
 		return m, nil
+	case vimTimeoutMsg:
+		if msg.token == m.pendingVimToken && msg.key == m.pendingVimKey {
+			m.pendingVimKey = ""
+			return m.executeSingleVim(msg.key)
+		}
+		return m, nil
+	case exportCompletedMsg:
+		m.mode = modeBrowse
+		m.flashToken++
+		m.flashMessage = fmt.Sprintf("✓ Exported %d keys from %s to %s", msg.count, msg.vault, msg.path)
+		return m, tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
+			return clearFlashMsg{token: m.flashToken}
+		})
+	case importCompletedMsg:
+		m.mode = modeBrowse
+		m.flashToken++
+		m.flashMessage = fmt.Sprintf("✓ Imported %d keys into %s from %s", msg.count, msg.vault, msg.path)
+		return m, tea.Batch(loadEntriesCmd(m.deps), tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
+			return clearFlashMsg{token: m.flashToken}
+		}))
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -115,15 +136,72 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleCreateVaultKey(msg)
 	case modeVaultPicker:
 		return m.handleVaultPickerKey(msg)
+	case modeCommandPalette:
+		return m.handleCommandPaletteKey(msg)
+	}
+
+	if m.pendingVimKey != "" {
+		if msg.String() == m.pendingVimKey {
+			keyName := m.pendingVimKey
+			m.pendingVimKey = ""
+			return m.executeDoubleVim(keyName)
+		}
+
+		pending := m.pendingVimKey
+		m.pendingVimKey = ""
+		if msg.String() == "ctrl+/" || key.Matches(msg, m.keys.Help) || key.Matches(msg, m.keys.Command) || key.Matches(msg, m.keys.Search) || key.Matches(msg, m.keys.VaultNext) || key.Matches(msg, m.keys.VaultPrev) || key.Matches(msg, m.keys.CreateVault) || key.Matches(msg, m.keys.VaultPicker) || key.Matches(msg, m.keys.Add) || key.Matches(msg, m.keys.Edit) || key.Matches(msg, m.keys.Delete) || key.Matches(msg, m.keys.Copy) || key.Matches(msg, m.keys.Confirm) || key.Matches(msg, m.keys.Top) || key.Matches(msg, m.keys.Bottom) || key.Matches(msg, m.keys.Quit) {
+			nextModel, cmd1 := m.executeSingleVim(pending)
+			nextConcrete := nextModel.(Model)
+			nextTea, cmd2 := nextConcrete.handleKey(msg)
+			return nextTea, tea.Batch(cmd1, cmd2)
+		}
+
+		m.pendingVimKey = pending
 	}
 
 	switch {
+	case msg.String() == "y":
+		m.pendingVimToken++
+		m.pendingVimKey = msg.String()
+		token := m.pendingVimToken
+		keyName := m.pendingVimKey
+		return m, tea.Tick(250*time.Millisecond, func(_ time.Time) tea.Msg {
+			return vimTimeoutMsg{token: token, key: keyName}
+		})
+	case msg.String() == "c":
+		selected, ok := m.selectedEntry()
+		if !ok {
+			return m, nil
+		}
+		m.pendingVimToken++
+		m.pendingVimKey = "c"
+		m.clearPreview()
+		return m, copyCmd(m.deps, selected)
+	case msg.String() == "d":
+		m.pendingVimToken++
+		m.pendingVimKey = "d"
+		if _, ok := m.selectedEntry(); ok {
+			m.mode = modeConfirmDelete
+		}
+		return m, nil
 	case key.Matches(msg, m.keys.Help):
 		m.mode = modeHelp
 		return m, nil
+	case key.Matches(msg, m.keys.Command):
+		m.mode = modeCommandPalette
+		m.commandInput.SetValue("")
+		m.commandInput.Focus()
+		return m, textinput.Blink
 	case key.Matches(msg, m.keys.Search):
 		m.mode = modeSearch
 		m.search.Focus()
+		return m, textinput.Blink
+	case msg.String() == "ctrl+/":
+		m.currentFilter = allVaultsLabel
+		m.mode = modeSearch
+		m.search.Focus()
+		m.search.SetValue("")
+		m.applyFilters()
 		return m, textinput.Blink
 	case key.Matches(msg, m.keys.VaultNext):
 		m.cycleVaultFilter()
@@ -141,6 +219,25 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.vaultPickerInput.SetValue("")
 		m.vaultPickerInput.Focus()
 		return m, textinput.Blink
+	case key.Matches(msg, m.keys.Bookmark):
+		selected, ok := m.selectedEntry()
+		if !ok {
+			return m, nil
+		}
+		if err := m.toggleBookmark(selected); err != nil {
+			m.err = err
+			return m, nil
+		}
+		m.applyFilters()
+		if m.isBookmarked(selected) {
+			m.flashMessage = fmt.Sprintf("✓ Bookmarked %s", selected.Key)
+		} else {
+			m.flashMessage = fmt.Sprintf("✓ Removed bookmark for %s", selected.Key)
+		}
+		m.flashToken++
+		return m, tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
+			return clearFlashMsg{token: m.flashToken}
+		})
 	case msg.String() >= "1" && msg.String() <= "9":
 		idx := int(msg.String()[0] - '1')
 		m.selectVaultByIndex(idx)
@@ -204,6 +301,55 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.clearPreview()
 	}
 	return m, cmd
+}
+
+func (m Model) executeSingleVim(keyName string) (tea.Model, tea.Cmd) {
+	switch keyName {
+	case "y":
+		selected, ok := m.selectedEntry()
+		if !ok {
+			return m, nil
+		}
+		m.clearPreview()
+		return m, copyCmd(m.deps, selected)
+	case "d":
+		if _, ok := m.selectedEntry(); ok {
+			m.mode = modeConfirmDelete
+		}
+	}
+	return m, nil
+}
+
+func (m Model) executeDoubleVim(keyName string) (tea.Model, tea.Cmd) {
+	switch keyName {
+	case "c":
+		selected, ok := m.selectedEntry()
+		if !ok {
+			return m, nil
+		}
+		m.mode = modeEdit
+		value := ""
+		if m.preview.revealed && m.preview.vault == selected.Vault && m.preview.key == selected.Key {
+			value = m.preview.value
+		}
+		m.form = newFormState(selected.Vault, selected.Key, value)
+		m.form.isProtected = selected.Protection != protectionUnprotected
+		return m, textinput.Blink
+	case "d":
+		if _, ok := m.selectedEntry(); ok {
+			m.mode = modeConfirmDelete
+		}
+		return m, nil
+	case "y":
+		selected, ok := m.selectedEntry()
+		if !ok {
+			return m, nil
+		}
+		m.clearPreview()
+		return m, copyCmd(m.deps, selected)
+	default:
+		return m, nil
+	}
 }
 
 func (m Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -342,6 +488,77 @@ func (m Model) handleVaultPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.vaultPickerInput, cmd = m.vaultPickerInput.Update(msg)
 	return m, cmd
+}
+
+func (m Model) handleCommandPaletteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if key.Matches(msg, m.keys.Cancel) {
+		m.mode = modeBrowse
+		m.commandInput.Blur()
+		return m, nil
+	}
+	if key.Matches(msg, m.keys.Confirm) {
+		return m.executeCommandPalette()
+	}
+	var cmd tea.Cmd
+	m.commandInput, cmd = m.commandInput.Update(msg)
+	return m, cmd
+}
+
+func (m Model) executeCommandPalette() (tea.Model, tea.Cmd) {
+	raw := strings.TrimSpace(m.commandInput.Value())
+	raw = strings.TrimPrefix(raw, ":")
+	m.commandInput.Blur()
+	m.mode = modeBrowse
+	if raw == "" {
+		return m, nil
+	}
+
+	name, arg, _ := strings.Cut(raw, " ")
+	arg = strings.TrimSpace(arg)
+
+	switch name {
+	case "vault":
+		if arg == "" {
+			m.mode = modeVaultPicker
+			m.vaultPickerInput.SetValue("")
+			m.vaultPickerInput.Focus()
+			return m, textinput.Blink
+		}
+		matched := m.fuzzyMatchVault(arg)
+		if matched != "" {
+			m.currentFilter = matched
+			m.clearPreview()
+			m.applyFilters()
+		}
+		return m, nil
+	case "search":
+		m.currentFilter = allVaultsLabel
+		m.search.SetValue(arg)
+		if arg == "" {
+			m.mode = modeSearch
+			m.search.Focus()
+			m.applyFilters()
+			return m, textinput.Blink
+		}
+		m.search.Blur()
+		m.applyFilters()
+		return m, nil
+	case "export":
+		path := arg
+		if path == "" {
+			path = fmt.Sprintf("%s.env", m.currentVaultContext())
+		}
+		return m, exportVaultCmd(m.deps, m.currentVaultContext(), path)
+	case "import":
+		if arg == "" {
+			m.flashMessage = "Import requires a file path"
+			return m, nil
+		}
+		return m, importVaultCmd(m.deps, m.currentVaultContext(), arg)
+	default:
+		m.flashMessage = fmt.Sprintf("Unknown command: %s", name)
+		return m, nil
+	}
 }
 
 func (m Model) submitForm() (Model, tea.Cmd) {

@@ -19,6 +19,13 @@ func (d itemDelegate) Spacing() int                            { return 0 }
 func (d itemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 
 func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	if header, ok := listItem.(groupHeader); ok {
+		line1 := d.styles.previewTitle.Render(fmt.Sprintf("%s (%d)", header.Vault, header.Count))
+		line2 := d.styles.subtle.Render(strings.Repeat("─", 18))
+		fmt.Fprint(w, line1+"\n"+line2)
+		return
+	}
+
 	item, ok := listItem.(entry)
 	if !ok {
 		return
@@ -34,6 +41,9 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 
 	prefix := item.prefix()
 	prefixLabel := d.styles.Prefix(prefix).Render(strings.ToUpper(prefix))
+	if d.model.isBookmarked(item) {
+		prefixLabel = "★ " + prefixLabel
+	}
 
 	masked := d.styles.masked.Render(maskedValue(item, d.model.preview))
 	line1 := prefixLabel + " " + titleStyle.Render(item.Key)

@@ -16,6 +16,8 @@ type keyMap struct {
 	VaultPrev   key.Binding
 	CreateVault key.Binding
 	VaultPicker key.Binding
+	Command     key.Binding
+	Bookmark    key.Binding
 	Confirm     key.Binding
 	Cancel      key.Binding
 	Quit        key.Binding
@@ -37,6 +39,8 @@ func defaultKeyMap() keyMap {
 		VaultPrev:   key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("S-Tab", "prev vault")),
 		CreateVault: key.NewBinding(key.WithKeys("ctrl+n"), key.WithHelp("Ctrl+N", "new vault")),
 		VaultPicker: key.NewBinding(key.WithKeys("ctrl+v"), key.WithHelp("Ctrl+V", "vault picker")),
+		Command:     key.NewBinding(key.WithKeys(":"), key.WithHelp(":", "cmd")),
+		Bookmark:    key.NewBinding(key.WithKeys("*"), key.WithHelp("*", "bookmark")),
 		Confirm:     key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "confirm")),
 		Cancel:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 		Quit:        key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
@@ -45,5 +49,5 @@ func defaultKeyMap() keyMap {
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Search, k.Copy, k.Add, k.Edit, k.Delete, k.VaultNext, k.Quit}
+	return []key.Binding{k.Search, k.Command, k.Copy, k.Bookmark, k.Delete, k.VaultNext, k.Quit}
 }

@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -64,6 +67,15 @@ type entry struct {
 	Modified   string
 }
 
+type groupHeader struct {
+	Vault string
+	Count int
+}
+
+func (g groupHeader) FilterValue() string {
+	return strings.ToLower(g.Vault)
+}
+
 func (e entry) FilterValue() string {
 	return strings.ToLower(e.Key)
 }
@@ -83,6 +95,7 @@ const (
 	modeHelp
 	modeCreateVault
 	modeVaultPicker
+	modeCommandPalette
 )
 
 type previewState struct {
@@ -90,6 +103,11 @@ type previewState struct {
 	key      string
 	value    string
 	revealed bool
+}
+
+type copyRecord struct {
+	Vault string
+	Key   string
 }
 
 type formState struct {
@@ -140,12 +158,30 @@ type vaultCreatedMsg struct {
 	name string
 }
 
+type vimTimeoutMsg struct {
+	token int
+	key   string
+}
+
+type exportCompletedMsg struct {
+	vault string
+	path  string
+	count int
+}
+
+type importCompletedMsg struct {
+	vault string
+	path  string
+	count int
+}
+
 type errMsg struct{ err error }
 
 type Model struct {
 	deps             Deps
 	list             list.Model
 	search           textinput.Model
+	commandInput     textinput.Model
 	vaultNameInput   textinput.Model
 	vaultPickerInput textinput.Model
 	keys             keyMap
@@ -161,10 +197,14 @@ type Model struct {
 	status           string
 	flashMessage     string
 	flashToken       int
+	copyHistory      []copyRecord
+	bookmarks        map[string]bool
 	err              error
 	width            int
 	height           int
 	revealToken      int
+	pendingVimKey    string
+	pendingVimToken  int
 	delegate         itemDelegate
 }
 
@@ -175,6 +215,12 @@ func NewModel(deps Deps) Model {
 	search.CharLimit = 128
 	search.Width = 32
 	search.Prompt = "search> "
+
+	commandInput := textinput.New()
+	commandInput.Placeholder = "vault | search | export | import"
+	commandInput.CharLimit = 256
+	commandInput.Width = 36
+	commandInput.Prompt = ":"
 
 	vaultInput := textinput.New()
 	vaultInput.Placeholder = "vault-name"
@@ -193,11 +239,13 @@ func NewModel(deps Deps) Model {
 		keys:             defaultKeyMap(),
 		styles:           styles,
 		search:           search,
+		commandInput:     commandInput,
 		vaultNameInput:   vaultInput,
 		vaultPickerInput: pickerInput,
 		currentFilter:    allVaultsLabel,
 		mode:             modeBrowse,
 		loading:          true,
+		bookmarks:        loadBookmarks(),
 	}
 	delegate := itemDelegate{styles: &m.styles, model: &m}
 	m.delegate = delegate
@@ -221,11 +269,18 @@ func (m Model) Init() tea.Cmd {
 func (m *Model) applyFilters() {
 	selected, hadSelection := m.selectedEntry()
 	items := make([]entry, 0, len(m.entries))
+	favorites := make([]entry, 0)
+	regular := make([]entry, 0)
 	for _, item := range m.entries {
 		if m.currentFilter != allVaultsLabel && item.Vault != m.currentFilter {
 			continue
 		}
 		items = append(items, item)
+		if m.isBookmarked(item) {
+			favorites = append(favorites, item)
+		} else {
+			regular = append(regular, item)
+		}
 	}
 
 	sort.SliceStable(items, func(i, j int) bool {
@@ -247,9 +302,50 @@ func (m *Model) applyFilters() {
 			searchTargets[i] = item.FilterValue()
 		}
 		matches := fuzzy.Find(strings.ToLower(query), searchTargets)
-		filtered := make([]list.Item, 0, len(matches))
+		matchedEntries := make([]entry, 0, len(matches))
 		for _, match := range matches {
-			filtered = append(filtered, items[match.Index])
+			matchedEntries = append(matchedEntries, items[match.Index])
+		}
+
+		if m.currentFilter == allVaultsLabel {
+			sort.SliceStable(matchedEntries, func(i, j int) bool {
+				if matchedEntries[i].Vault != matchedEntries[j].Vault {
+					return matchedEntries[i].Vault < matchedEntries[j].Vault
+				}
+				return matchedEntries[i].Key < matchedEntries[j].Key
+			})
+
+			counts := make(map[string]int)
+			for _, item := range matchedEntries {
+				counts[item.Vault]++
+			}
+			if len(counts) <= 1 {
+				filtered := make([]list.Item, 0, len(matchedEntries))
+				for _, item := range matchedEntries {
+					filtered = append(filtered, item)
+				}
+				m.list.SetItems(filtered)
+				m.restoreSelection(filtered, selected, hadSelection)
+				return
+			}
+
+			grouped := make([]list.Item, 0, len(matchedEntries)+len(counts))
+			lastVault := ""
+			for _, item := range matchedEntries {
+				if item.Vault != lastVault {
+					lastVault = item.Vault
+					grouped = append(grouped, groupHeader{Vault: item.Vault, Count: counts[item.Vault]})
+				}
+				grouped = append(grouped, item)
+			}
+			m.list.SetItems(grouped)
+			m.restoreSelection(grouped, selected, hadSelection)
+			return
+		}
+
+		filtered := make([]list.Item, 0, len(matchedEntries))
+		for _, item := range matchedEntries {
+			filtered = append(filtered, item)
 		}
 		m.list.SetItems(filtered)
 		m.restoreSelection(filtered, selected, hadSelection)
@@ -257,11 +353,33 @@ func (m *Model) applyFilters() {
 	}
 
 	visible := make([]list.Item, 0, len(items))
-	for _, item := range items {
+	if len(favorites) > 0 {
+		sortEntries(favorites)
+		visible = append(visible, groupHeader{Vault: "⭐ Favorites", Count: len(favorites)})
+		for _, item := range favorites {
+			visible = append(visible, item)
+		}
+	}
+	sortEntries(regular)
+	for _, item := range regular {
 		visible = append(visible, item)
 	}
 	m.list.SetItems(visible)
 	m.restoreSelection(visible, selected, hadSelection)
+}
+
+func sortEntries(items []entry) {
+	sort.SliceStable(items, func(i, j int) bool {
+		leftPrefix := items[i].prefix()
+		rightPrefix := items[j].prefix()
+		if leftPrefix != rightPrefix {
+			return leftPrefix < rightPrefix
+		}
+		if items[i].Key != items[j].Key {
+			return items[i].Key < items[j].Key
+		}
+		return items[i].Vault < items[j].Vault
+	})
 }
 
 func (m *Model) restoreSelection(items []list.Item, selected entry, hadSelection bool) {
@@ -277,7 +395,12 @@ func (m *Model) restoreSelection(items []list.Item, selected entry, hadSelection
 			}
 		}
 	}
-	m.list.Select(0)
+	for i, item := range items {
+		if _, ok := item.(entry); ok {
+			m.list.Select(i)
+			return
+		}
+	}
 }
 
 func (m *Model) cycleVaultFilter() {
@@ -505,6 +628,152 @@ func (m Model) vaultKeyCount(vault string) int {
 		}
 	}
 	return count
+}
+
+func (m Model) visibleEntryCount() int {
+	count := 0
+	for _, item := range m.list.Items() {
+		if _, ok := item.(entry); ok {
+			count++
+		}
+	}
+	return count
+}
+
+func (m Model) currentVaultContext() string {
+	if m.currentFilter != "" && m.currentFilter != allVaultsLabel {
+		return m.currentFilter
+	}
+	if m.activeVault != "" {
+		return m.activeVault
+	}
+	return "default"
+}
+
+func bookmarkKey(item entry) string {
+	return item.Vault + "/" + item.Key
+}
+
+func (m Model) isBookmarked(item entry) bool {
+	if m.bookmarks == nil {
+		return false
+	}
+	return m.bookmarks[bookmarkKey(item)]
+}
+
+func (m *Model) toggleBookmark(item entry) error {
+	if m.bookmarks == nil {
+		m.bookmarks = make(map[string]bool)
+	}
+	key := bookmarkKey(item)
+	if m.bookmarks[key] {
+		delete(m.bookmarks, key)
+	} else {
+		m.bookmarks[key] = true
+	}
+	return saveBookmarks(m.bookmarks)
+}
+
+func (m *Model) recordCopy(item entry) {
+	updated := []copyRecord{{Vault: item.Vault, Key: item.Key}}
+	for _, existing := range m.copyHistory {
+		if existing.Vault == item.Vault && existing.Key == item.Key {
+			continue
+		}
+		updated = append(updated, existing)
+		if len(updated) == 3 {
+			break
+		}
+	}
+	m.copyHistory = updated
+}
+
+func (m Model) copyHistorySummary() string {
+	if len(m.copyHistory) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(m.copyHistory))
+	for _, item := range m.copyHistory {
+		parts = append(parts, item.Key)
+	}
+	return "Copied: " + strings.Join(parts, ", ")
+}
+
+var bookmarksPath = func() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".kc", "bookmarks.json")
+}
+
+func loadBookmarks() map[string]bool {
+	path := bookmarksPath()
+	if path == "" {
+		return make(map[string]bool)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return make(map[string]bool)
+	}
+	var bookmarks map[string]bool
+	if err := json.Unmarshal(data, &bookmarks); err != nil {
+		return make(map[string]bool)
+	}
+	if bookmarks == nil {
+		return make(map[string]bool)
+	}
+	return bookmarks
+}
+
+func saveBookmarks(bookmarks map[string]bool) error {
+	path := bookmarksPath()
+	if path == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(bookmarks, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
+}
+
+type paletteCommand struct {
+	Name  string
+	Usage string
+	Desc  string
+}
+
+func paletteCommands() []paletteCommand {
+	return []paletteCommand{
+		{Name: "vault", Usage: "vault [name]", Desc: "switch vault or open picker"},
+		{Name: "search", Usage: "search [query]", Desc: "search across all vaults"},
+		{Name: "export", Usage: "export [file]", Desc: "export current vault to .env"},
+		{Name: "import", Usage: "import <file>", Desc: "import .env into current vault"},
+	}
+}
+
+func (m Model) matchingPaletteCommands() []paletteCommand {
+	raw := strings.TrimSpace(m.commandInput.Value())
+	raw = strings.TrimPrefix(raw, ":")
+	if raw == "" {
+		return paletteCommands()
+	}
+	name, _, _ := strings.Cut(raw, " ")
+	commands := paletteCommands()
+	filtered := make([]paletteCommand, 0, len(commands))
+	for _, cmd := range commands {
+		if strings.HasPrefix(cmd.Name, name) || strings.Contains(cmd.Usage, raw) {
+			filtered = append(filtered, cmd)
+		}
+	}
+	if len(filtered) == 0 {
+		return commands
+	}
+	return filtered
 }
 
 func prefixOf(key string) string {

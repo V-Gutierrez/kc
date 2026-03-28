@@ -15,6 +15,12 @@ func (m Model) View() string {
 			lipgloss.Center,
 			banner,
 			"",
+			m.styles.subtle.Render("[ All ]  [ 1:default ]  [ 2:prod ]"),
+			m.styles.subtle.Render("────────────────────────────────────────"),
+			m.styles.subtle.Render("AWS_API_KEY            │  Preview"),
+			m.styles.subtle.Render("DB_PASSWORD            │  Value   ••••••"),
+			m.styles.subtle.Render("STRIPE_KEY             │  Vault   default"),
+			m.styles.subtle.Render("────────────────────────────────────────"),
 			m.styles.loading.Render("Loading vaults and keys..."),
 		)
 		width := max(m.width, 80)
@@ -47,11 +53,23 @@ func (m Model) View() string {
 	if m.mode == modeVaultPicker {
 		right = m.vaultPickerView()
 	}
+	if m.mode == modeCommandPalette {
+		right = m.commandPaletteView()
+	}
 
-	body := lipgloss.JoinHorizontal(lipgloss.Top,
-		lipgloss.NewStyle().Width(max(40, m.width/2)).Render(left),
-		lipgloss.NewStyle().PaddingLeft(2).Width(max(30, m.width/2-4)).Render(right),
-	)
+	leftWidth := max(40, m.width/2)
+	rightWidth := max(30, m.width/2-4)
+	narrow := m.width > 0 && m.width < 80
+
+	body := lipgloss.NewStyle().Width(max(40, m.width-4)).Render(left)
+	if !narrow {
+		body = lipgloss.JoinHorizontal(lipgloss.Top,
+			lipgloss.NewStyle().Width(leftWidth).Render(left),
+			lipgloss.NewStyle().PaddingLeft(2).Width(rightWidth).Render(right),
+		)
+	} else if m.mode == modeAdd || m.mode == modeEdit || m.mode == modeConfirmDelete || m.mode == modeHelp || m.mode == modeCreateVault || m.mode == modeVaultPicker || m.mode == modeCommandPalette {
+		body = lipgloss.NewStyle().Width(max(40, m.width-4)).Render(right)
+	}
 
 	statusBar := m.statusView()
 	return m.styles.app.Render(lipgloss.JoinVertical(lipgloss.Left, body, "\n", statusBar))
@@ -60,6 +78,9 @@ func (m Model) View() string {
 func (m Model) statusView() string {
 	if m.flashMessage != "" {
 		return m.styles.flash.Render(m.flashMessage)
+	}
+	if history := m.copyHistorySummary(); history != "" {
+		return m.styles.statusBar.Render(m.styles.breadcrumb.Render(m.breadcrumb()) + "   " + m.styles.statusHint.Render(history+"   "+m.contextualHints()))
 	}
 
 	breadcrumb := m.breadcrumb()
@@ -110,6 +131,8 @@ func (m Model) contextualHints() string {
 		return "Enter create • Esc cancel"
 	case modeVaultPicker:
 		return "Enter select • Esc cancel"
+	case modeCommandPalette:
+		return "Enter run • Esc cancel"
 	}
 	return "/ search  : cmd  ? help"
 }
@@ -119,7 +142,7 @@ func (m Model) headerView() string {
 	if vault == allVaultsLabel {
 		vault = m.activeVault
 	}
-	count := len(m.list.Items())
+	count := m.visibleEntryCount()
 	label := "keys"
 	if count == 1 {
 		label = "key"
@@ -156,7 +179,7 @@ func (m Model) searchView() string {
 	if m.mode != modeSearch && m.search.Value() == "" {
 		return m.styles.subtle.Render("Press / to search across visible keys")
 	}
-	count := len(m.list.Items())
+	count := m.visibleEntryCount()
 	suffix := " match"
 	if count != 1 {
 		suffix += "es"
@@ -369,6 +392,14 @@ func (m Model) helpOverlayView() string {
 			"Tab        Next vault filter",
 			"Shift+Tab  Previous vault filter",
 			"1-9        Quick-switch vault",
+			"Ctrl+V     Vault picker",
+		}},
+		{"Power", []string{
+			":          Command palette",
+			"dd / yy    Vim delete / copy",
+			"cc         Vim edit",
+			"Ctrl+/     Search all vaults",
+			"*          Toggle bookmark",
 		}},
 		{"General", []string{
 			"? or Esc   Close this help",
@@ -451,6 +482,25 @@ func (m Model) vaultPickerView() string {
 	}
 
 	content = append(content, "", m.styles.activeHelp.Render("Enter: select | Esc: cancel"))
+	return m.styles.overlay.Render(strings.Join(content, "\n"))
+}
+
+func (m Model) commandPaletteView() string {
+	content := []string{
+		m.styles.header.Render("Command Palette"),
+		"",
+		m.commandInput.View(),
+		"",
+	}
+
+	for _, cmd := range m.matchingPaletteCommands() {
+		content = append(content,
+			m.styles.previewTitle.Render(cmd.Usage),
+			m.styles.subtle.Render("  "+cmd.Desc),
+		)
+	}
+
+	content = append(content, "", m.styles.activeHelp.Render("Examples: :vault prod  :search stripe  :export ./prod.env  :import ./.env"))
 	return m.styles.overlay.Render(strings.Join(content, "\n"))
 }
 

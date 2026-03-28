@@ -1,9 +1,12 @@
 package tui
 
 import (
+	"fmt"
+	"os"
 	"sort"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/v-gutierrez/kc/internal/envutil"
 )
 
 func loadEntriesCmd(deps Deps) tea.Cmd {
@@ -98,5 +101,49 @@ func createVaultCmd(deps Deps, name string) tea.Cmd {
 			return errMsg{err: err}
 		}
 		return vaultCreatedMsg{name: name}
+	}
+}
+
+func exportVaultCmd(deps Deps, vault, path string) tea.Cmd {
+	return func() tea.Msg {
+		metadata, err := deps.Store.ListMetadata(vault)
+		if err != nil {
+			return errMsg{err: err}
+		}
+		sort.Slice(metadata, func(i, j int) bool {
+			return metadata[i].Key < metadata[j].Key
+		})
+		lines := make([]string, 0, len(metadata))
+		for _, item := range metadata {
+			value, err := deps.Store.Get(vault, item.Key)
+			if err != nil {
+				return errMsg{err: err}
+			}
+			lines = append(lines, fmt.Sprintf("%s=%s", item.Key, envutil.DotenvQuote(value)))
+		}
+		if err := os.WriteFile(path, []byte(envutil.JoinLines(lines)), 0o600); err != nil {
+			return errMsg{err: err}
+		}
+		return exportCompletedMsg{vault: vault, path: path, count: len(lines)}
+	}
+}
+
+func importVaultCmd(deps Deps, vault, path string) tea.Cmd {
+	return func() tea.Msg {
+		file, err := os.Open(path)
+		if err != nil {
+			return errMsg{err: err}
+		}
+		defer file.Close()
+
+		entries := envutil.ParseEnvReader(file)
+		count := 0
+		for _, key := range envutil.SortedKeys(entries) {
+			if err := deps.Store.SetWithProtection(vault, key, entries[key], true); err != nil {
+				return errMsg{err: err}
+			}
+			count++
+		}
+		return importCompletedMsg{vault: vault, path: path, count: count}
 	}
 }

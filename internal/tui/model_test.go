@@ -2,6 +2,8 @@ package tui
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -565,5 +567,248 @@ func TestProtectionLabel(t *testing.T) {
 	}
 	if got := protectionLabel(protectionUnprotected); got != "🔓 Unprotected" {
 		t.Fatalf("protectionLabel(unprotected) = %q", got)
+	}
+}
+
+func TestCrossVaultSearchGroupsResultsByVault(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	updated, _ := m.Update(loadedMsg{
+		vaults:      []string{"default", "prod"},
+		activeVault: "default",
+		items: []entry{
+			{Vault: "default", Key: "STRIPE_LIVE"},
+			{Vault: "default", Key: "AWS_KEY"},
+			{Vault: "prod", Key: "STRIPE_WEBHOOK"},
+		},
+	})
+	model := updated.(Model)
+	model.currentFilter = allVaultsLabel
+	model.search.SetValue("stripe")
+	model.applyFilters()
+
+	items := model.list.Items()
+	if len(items) != 4 {
+		t.Fatalf("grouped search items = %d, want 4", len(items))
+	}
+	if header, ok := items[0].(groupHeader); !ok || header.Vault != "default" || header.Count != 1 {
+		t.Fatalf("first item = %#v, want default group header", items[0])
+	}
+	if _, ok := items[1].(entry); !ok {
+		t.Fatalf("second item should be entry, got %#v", items[1])
+	}
+	if header, ok := items[2].(groupHeader); !ok || header.Vault != "prod" || header.Count != 1 {
+		t.Fatalf("third item = %#v, want prod group header", items[2])
+	}
+	if model.visibleEntryCount() != 2 {
+		t.Fatalf("visible entry count = %d, want 2", model.visibleEntryCount())
+	}
+}
+
+func TestCommandPaletteSearchCommandSetsAllVaultSearch(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	updated, _ := m.Update(loadedMsg{vaults: []string{"default", "prod"}, activeVault: "default", items: []entry{{Vault: "default", Key: "STRIPE_LIVE"}, {Vault: "prod", Key: "STRIPE_WEBHOOK"}}})
+	model := updated.(Model)
+	model.mode = modeCommandPalette
+	model.commandInput.SetValue("search stripe")
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(Model)
+	if cmd != nil {
+		t.Fatal("search command should not return async cmd")
+	}
+	if model.currentFilter != allVaultsLabel {
+		t.Fatalf("currentFilter = %q, want all vaults", model.currentFilter)
+	}
+	if model.search.Value() != "stripe" {
+		t.Fatalf("search value = %q, want stripe", model.search.Value())
+	}
+}
+
+func TestCommandPaletteVaultCommandSetsFilter(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	updated, _ := m.Update(loadedMsg{vaults: []string{"default", "prod"}, activeVault: "default", items: []entry{{Vault: "default", Key: "A"}, {Vault: "prod", Key: "B"}}})
+	model := updated.(Model)
+	model.mode = modeCommandPalette
+	model.commandInput.SetValue("vault prod")
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(Model)
+	if model.currentFilter != "prod" {
+		t.Fatalf("currentFilter = %q, want prod", model.currentFilter)
+	}
+}
+
+func TestCommandPaletteExportCommandWritesFile(t *testing.T) {
+	store := newMockStore()
+	store.keys["default"] = []string{"API_KEY"}
+	store.values["default"] = map[string]string{"API_KEY": "secret"}
+	store.metadata["default"] = map[string]string{"API_KEY": protectionProtected}
+	path := filepath.Join(t.TempDir(), "export.env")
+
+	m := NewModel(Deps{Store: store})
+	m.activeVault = "default"
+	m.currentFilter = "default"
+	m.mode = modeCommandPalette
+	m.commandInput.SetValue("export " + path)
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected export command")
+	}
+	msg := cmd()
+	updated, _ = model.Update(msg)
+	model = updated.(Model)
+	contents, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if !strings.Contains(string(contents), "API_KEY=secret") {
+		t.Fatalf("export file contents = %q", string(contents))
+	}
+	if !strings.Contains(model.flashMessage, "Exported 1 keys") {
+		t.Fatalf("flash = %q", model.flashMessage)
+	}
+}
+
+func TestCommandPaletteImportCommandReadsFile(t *testing.T) {
+	store := newMockStore()
+	path := filepath.Join(t.TempDir(), "import.env")
+	if err := os.WriteFile(path, []byte("API_KEY=secret\nDB_PASS=hidden\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	m := NewModel(Deps{Store: store})
+	m.activeVault = "default"
+	m.currentFilter = "default"
+	m.mode = modeCommandPalette
+	m.commandInput.SetValue("import " + path)
+
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected import command")
+	}
+	msg := cmd()
+	updated, _ = model.Update(msg)
+	model = updated.(Model)
+	if len(store.setCalls) != 2 {
+		t.Fatalf("set calls = %d, want 2", len(store.setCalls))
+	}
+	if !strings.Contains(model.flashMessage, "Imported 2 keys") {
+		t.Fatalf("flash = %q", model.flashMessage)
+	}
+}
+
+func TestDoubleYYCopiesSelectedEntry(t *testing.T) {
+	store := newMockStore()
+	store.keys["default"] = []string{"TOKEN"}
+	store.values["default"] = map[string]string{"TOKEN": "secret"}
+	clipboard := &mockClipboard{}
+	m := NewModel(Deps{Store: store, Clipboard: clipboard})
+	updated, _ := m.Update(loadedMsg{items: []entry{{Vault: "default", Key: "TOKEN"}}, activeVault: "default"})
+	model := updated.(Model)
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	model = updated.(Model)
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	model = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected copy cmd from yy")
+	}
+	updated, _ = model.Update(cmd())
+	model = updated.(Model)
+	if len(clipboard.values) != 1 || clipboard.values[0] != "secret" {
+		t.Fatalf("clipboard values = %v, want [secret]", clipboard.values)
+	}
+}
+
+func TestDoubleCCEntersEditMode(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	updated, _ := m.Update(loadedMsg{items: []entry{{Vault: "default", Key: "TOKEN", Protection: protectionProtected}}, activeVault: "default"})
+	model := updated.(Model)
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	model = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected immediate copy command from first c")
+	}
+	updated, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	model = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected blink cmd from cc")
+	}
+	if model.mode != modeEdit {
+		t.Fatalf("mode after cc = %v, want modeEdit", model.mode)
+	}
+}
+
+func TestSingleCTimeoutStillCopies(t *testing.T) {
+	store := newMockStore()
+	store.keys["default"] = []string{"TOKEN"}
+	store.values["default"] = map[string]string{"TOKEN": "secret"}
+	clipboard := &mockClipboard{}
+	m := NewModel(Deps{Store: store, Clipboard: clipboard})
+	updated, _ := m.Update(loadedMsg{items: []entry{{Vault: "default", Key: "TOKEN"}}, activeVault: "default"})
+	model := updated.(Model)
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	model = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected copy command from first c")
+	}
+	updated, _ = model.Update(cmd())
+	model = updated.(Model)
+	if len(clipboard.values) != 1 || clipboard.values[0] != "secret" {
+		t.Fatalf("clipboard values = %v, want [secret]", clipboard.values)
+	}
+}
+
+func TestBookmarkTogglePersistsAndPinsEntry(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bookmarks.json")
+	originalPathFn := bookmarksPath
+	bookmarksPath = func() string { return path }
+	defer func() { bookmarksPath = originalPathFn }()
+
+	m := NewModel(Deps{Store: newMockStore()})
+	updated, _ := m.Update(loadedMsg{items: []entry{{Vault: "default", Key: "TOKEN"}, {Vault: "default", Key: "ALPHA"}}, activeVault: "default"})
+	model := updated.(Model)
+	model.list.Select(0)
+
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'*'}})
+	model = updated.(Model)
+	if cmd == nil {
+		t.Fatal("expected flash clear command from bookmark toggle")
+	}
+	if !model.isBookmarked(entry{Vault: "default", Key: "ALPHA"}) && !model.isBookmarked(entry{Vault: "default", Key: "TOKEN"}) {
+		t.Fatal("expected one entry to be bookmarked")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	if !strings.Contains(string(data), "default/") {
+		t.Fatalf("bookmark file contents = %q", string(data))
+	}
+	if header, ok := model.list.Items()[0].(groupHeader); !ok || header.Vault != "⭐ Favorites" {
+		t.Fatalf("first item = %#v, want favorites header", model.list.Items()[0])
+	}
+}
+
+func TestCopyHistorySummaryTracksLastThreeCopies(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.recordCopy(entry{Vault: "default", Key: "ONE"})
+	m.recordCopy(entry{Vault: "default", Key: "TWO"})
+	m.recordCopy(entry{Vault: "default", Key: "THREE"})
+	m.recordCopy(entry{Vault: "default", Key: "FOUR"})
+
+	if got := len(m.copyHistory); got != 3 {
+		t.Fatalf("copyHistory len = %d, want 3", got)
+	}
+	if got := m.copyHistorySummary(); !strings.Contains(got, "FOUR") || !strings.Contains(got, "THREE") || !strings.Contains(got, "TWO") {
+		t.Fatalf("copy history summary = %q", got)
+	}
+	if strings.Contains(m.copyHistorySummary(), "ONE") {
+		t.Fatalf("copy history summary should drop oldest entry, got %q", m.copyHistorySummary())
 	}
 }

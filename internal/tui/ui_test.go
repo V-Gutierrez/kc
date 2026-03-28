@@ -409,7 +409,7 @@ func TestChiefsBorderContainsStripeCharacters(t *testing.T) {
 func TestHelpViewContainsBindings(t *testing.T) {
 	m := NewModel(Deps{Store: newMockStore()})
 	output := m.helpView()
-	for _, want := range []string{"/ search", "c copy", "a add", "d delete"} {
+	for _, want := range []string{"/ search", ": cmd", "c copy", "* bookmark", "d delete"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("helpView = %q, want %q", output, want)
 		}
@@ -809,5 +809,33 @@ func TestVaultPickerNoMatchKeepsCurrentFilter(t *testing.T) {
 	model := updated.(Model)
 	if model.currentFilter != "default" {
 		t.Fatalf("currentFilter should remain %q on no match, got %q", "default", model.currentFilter)
+	}
+}
+
+func TestCommandPaletteViewShowsCommands(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.mode = modeCommandPalette
+	output := m.commandPaletteView()
+	for _, want := range []string{"Command Palette", "vault [name]", "search [query]", "export [file]", "import <file>"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("commandPaletteView missing %q, got: %q", want, output)
+		}
+	}
+}
+
+func TestResponsiveLayoutCollapsesPreviewWhenNarrow(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	m.vaults = []string{allVaultsLabel, "default"}
+	m.entries = []entry{{Vault: "default", Key: "TOKEN"}}
+	m.applyFilters()
+	m.loading = false
+	m.width = 70
+	m.height = 24
+	output := m.View()
+	if strings.Contains(output, "Preview") {
+		t.Fatalf("narrow View() should collapse preview, got: %q", output)
+	}
+	if !strings.Contains(output, "TOKEN") {
+		t.Fatalf("narrow View() missing list content, got: %q", output)
 	}
 }
