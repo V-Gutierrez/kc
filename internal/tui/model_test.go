@@ -743,6 +743,34 @@ func TestDoubleCCEntersEditMode(t *testing.T) {
 	}
 }
 
+func TestDoubleDDEntersConfirmDeleteMode(t *testing.T) {
+	m := NewModel(Deps{Store: newMockStore()})
+	updated, _ := m.Update(loadedMsg{items: []entry{{Vault: "default", Key: "TOKEN", Protection: protectionProtected}}, activeVault: "default"})
+	model := updated.(Model)
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model = updated.(Model)
+	if model.mode != modeConfirmDelete {
+		t.Fatalf("mode after first d = %v, want modeConfirmDelete", model.mode)
+	}
+	if model.pendingVimKey != "d" {
+		t.Fatalf("pendingVimKey = %q, want d", model.pendingVimKey)
+	}
+
+	model.mode = modeBrowse
+	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model = updated.(Model)
+	if cmd != nil {
+		t.Fatal("dd should not return async command")
+	}
+	if model.mode != modeConfirmDelete {
+		t.Fatalf("mode after dd = %v, want modeConfirmDelete", model.mode)
+	}
+	if model.pendingVimKey != "" {
+		t.Fatalf("pendingVimKey after dd = %q, want empty", model.pendingVimKey)
+	}
+}
+
 func TestSingleCTimeoutStillCopies(t *testing.T) {
 	store := newMockStore()
 	store.keys["default"] = []string{"TOKEN"}

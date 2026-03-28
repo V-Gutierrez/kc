@@ -245,7 +245,7 @@ func TestPreviewViewShowsActionHints(t *testing.T) {
 	m.entries = []entry{{Vault: "default", Key: "TOKEN", Protection: protectionProtected}}
 	m.applyFilters()
 	output := m.previewView()
-	for _, want := range []string{"Enter", "Copy", "Edit", "Delete"} {
+	for _, want := range []string{"[Enter]", "[yy]", "[cc]", "[dd]", "[*]", "Bookmark"} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("previewView missing action hint %q, got: %q", want, output)
 		}

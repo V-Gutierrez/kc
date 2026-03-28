@@ -226,7 +226,7 @@ func (m Model) previewView() string {
 			m.styles.normal.Render(renderModified(item.Modified)),
 			"",
 			m.styles.subtle.Render("─── Actions ───"),
-			m.styles.help.Render("[Enter] Reveal  [c] Copy  [e] Edit  [d] Delete"),
+			m.styles.help.Render("[Enter] Reveal  [yy] Copy  [cc] Edit  [dd] Delete  [*] Bookmark"),
 		)
 	} else {
 		lines = append(lines, m.styles.subtle.Render("No key selected"))
@@ -383,10 +383,10 @@ func (m Model) helpOverlayView() string {
 		}},
 		{"Actions", []string{
 			"Enter      Reveal / Copy revealed",
-			"c          Copy (reveal + clipboard)",
+			"yy         Copy selected key",
 			"a          Add new key",
-			"e          Edit selected key",
-			"d          Delete selected key",
+			"cc         Edit selected key",
+			"dd         Delete selected key",
 		}},
 		{"Vaults", []string{
 			"Tab        Next vault filter",
