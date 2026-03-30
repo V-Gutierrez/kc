@@ -717,7 +717,7 @@ func TestDoubleYYCopiesSelectedEntry(t *testing.T) {
 		t.Fatal("expected copy cmd from yy")
 	}
 	updated, _ = model.Update(cmd())
-	model = updated.(Model)
+	_ = updated.(Model)
 	if len(clipboard.values) != 1 || clipboard.values[0] != "secret" {
 		t.Fatalf("clipboard values = %v, want [secret]", clipboard.values)
 	}
@@ -786,7 +786,7 @@ func TestSingleCTimeoutStillCopies(t *testing.T) {
 		t.Fatal("expected copy command from first c")
 	}
 	updated, _ = model.Update(cmd())
-	model = updated.(Model)
+	_ = updated.(Model)
 	if len(clipboard.values) != 1 || clipboard.values[0] != "secret" {
 		t.Fatalf("clipboard values = %v, want [secret]", clipboard.values)
 	}
