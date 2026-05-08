@@ -1555,3 +1555,143 @@ func TestVaultFlagCompletesVaultNames(t *testing.T) {
 		t.Errorf("expected NoFileComp directive (:4) in output: %q", stdout)
 	}
 }
+
+func TestExport_EnvFile_UpdatesExistingKey(t *testing.T) {
+	app, store, _, _ := newTestAppWithBulk()
+	if err := store.Set("default", "FOO", "new"); err != nil {
+		t.Fatal(err)
+	}
+	envFile := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(envFile, []byte("FOO=old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := executeCmd(app, "export", "--env-file", envFile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty", stdout)
+	}
+	data, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(data); got != "FOO=new\n" {
+		t.Fatalf("env file = %q, want FOO=new", got)
+	}
+	if !strings.Contains(stderr, "✓ 1 keys updated, 0 appended") {
+		t.Fatalf("stderr = %q, want update summary", stderr)
+	}
+}
+
+func TestExport_EnvFile_UncommentsCommentedKey(t *testing.T) {
+	app, store, _, _ := newTestAppWithBulk()
+	if err := store.Set("default", "FOO", "new"); err != nil {
+		t.Fatal(err)
+	}
+	envFile := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(envFile, []byte("# FOO=old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := executeCmd(app, "export", "--env-file", envFile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	data, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(data); got != "FOO=new\n" {
+		t.Fatalf("env file = %q, want FOO=new", got)
+	}
+}
+
+func TestExport_EnvFile_AppendsNewKey(t *testing.T) {
+	app, store, _, _ := newTestAppWithBulk()
+	if err := store.Set("default", "BAR", "val"); err != nil {
+		t.Fatal(err)
+	}
+	envFile := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(envFile, []byte("FOO=old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := executeCmd(app, "export", "--env-file", envFile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	data, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(data); !strings.Contains(got, "BAR=val\n") {
+		t.Fatalf("env file = %q, want appended BAR=val", got)
+	}
+}
+
+func TestExport_EnvFile_KeysFilter(t *testing.T) {
+	app, store, _, _ := newTestAppWithBulk()
+	for key, value := range map[string]string{"A": "one", "B": "two", "C": "three"} {
+		if err := store.Set("default", key, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	envFile := filepath.Join(t.TempDir(), ".env")
+
+	_, _, err := executeCmd(app, "export", "--env-file", envFile, "--keys", "A,C")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	data, err := os.ReadFile(envFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	if !strings.Contains(got, "A=one\n") || !strings.Contains(got, "C=three\n") {
+		t.Fatalf("env file = %q, want A and C", got)
+	}
+	if strings.Contains(got, "B=two") {
+		t.Fatalf("env file = %q, should not contain B", got)
+	}
+}
+
+func TestExport_EnvFile_MutuallyExclusiveWithOutput(t *testing.T) {
+	app, store, _, _ := newTestAppWithBulk()
+	if err := store.Set("default", "FOO", "new"); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+
+	_, _, err := executeCmd(app, "export", "--env-file", filepath.Join(dir, ".env"), "--output", filepath.Join(dir, "out.env"))
+	if err == nil {
+		t.Fatal("expected mutually exclusive flags error")
+	}
+	if got := err.Error(); got != "export: --env-file and --output are mutually exclusive" {
+		t.Fatalf("error = %q, want mutually exclusive error", got)
+	}
+}
+
+func TestExport_EnvFile_SummaryOnStderr(t *testing.T) {
+	app, store, _, _ := newTestAppWithBulk()
+	if err := store.Set("default", "FOO", "new"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Set("default", "BAR", "val"); err != nil {
+		t.Fatal(err)
+	}
+	envFile := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(envFile, []byte("FOO=old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, err := executeCmd(app, "export", "--env-file", envFile)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := fmt.Sprintf("✓ 1 keys updated, 1 appended → %s\n", envFile)
+	if stderr != want {
+		t.Fatalf("stderr = %q, want %q", stderr, want)
+	}
+}

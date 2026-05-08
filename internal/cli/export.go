@@ -19,6 +19,11 @@ func newExportCmd(app *App) *cobra.Command {
 				return err
 			}
 			outPath, _ := cmd.Flags().GetString("output")
+			envFilePath, _ := cmd.Flags().GetString("env-file")
+			requestedKeys, _ := cmd.Flags().GetStringSlice("keys")
+			if envFilePath != "" && outPath != "" {
+				return fmt.Errorf("export: --env-file and --output are mutually exclusive")
+			}
 			metadata, err := app.Store.ListMetadata(vault)
 			if err != nil {
 				return fmt.Errorf("export: %w", err)
@@ -36,6 +41,19 @@ func newExportCmd(app *App) *cobra.Command {
 			entries, err := app.Bulk.GetAll(vault)
 			if err != nil {
 				return fmt.Errorf("export: %w", err)
+			}
+			entries, err = filterExportEntries(entries, requestedKeys)
+			if err != nil {
+				return err
+			}
+
+			if envFilePath != "" {
+				updated, appended, err := envutil.UpsertEnvFile(envFilePath, entries)
+				if err != nil {
+					return fmt.Errorf("export: upsert env file: %w", err)
+				}
+				fmt.Fprintf(cmd.ErrOrStderr(), "✓ %d keys updated, %d appended → %s\n", updated, appended, envFilePath)
+				return nil
 			}
 
 			keys := sortedKeys(entries)
@@ -56,7 +74,27 @@ func newExportCmd(app *App) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringP("output", "o", "", "write output to file instead of stdout")
+	cmd.Flags().String("env-file", "", "upsert secrets into existing .env file")
+	cmd.Flags().StringSlice("keys", nil, "comma-separated list of keys to export (default: all)")
 	return cmd
+}
+
+func filterExportEntries(entries map[string]string, requestedKeys []string) (map[string]string, error) {
+	if len(requestedKeys) == 0 {
+		return entries, nil
+	}
+	filtered := make(map[string]string, len(requestedKeys))
+	for _, key := range requestedKeys {
+		if key == "" {
+			continue
+		}
+		value, ok := entries[key]
+		if !ok {
+			return nil, fmt.Errorf("export: requested key %q not found in vault", key)
+		}
+		filtered[key] = value
+	}
+	return filtered, nil
 }
 
 func sortedKeys(m map[string]string) []string {
