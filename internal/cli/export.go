@@ -22,7 +22,7 @@ func newExportCmd(app *App) *cobra.Command {
 			envFilePath, _ := cmd.Flags().GetString("env-file")
 			requestedKeys, _ := cmd.Flags().GetStringSlice("keys")
 			if envFilePath != "" && outPath != "" {
-				return fmt.Errorf("export: --env-file and --output are mutually exclusive")
+				return fmt.Errorf("export: choose either --env-file to update an existing .env file or --output to write a new export, not both")
 			}
 			metadata, err := app.Store.ListMetadata(vault)
 			if err != nil {
@@ -74,8 +74,8 @@ func newExportCmd(app *App) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringP("output", "o", "", "write output to file instead of stdout")
-	cmd.Flags().String("env-file", "", "upsert secrets into existing .env file")
-	cmd.Flags().StringSlice("keys", nil, "comma-separated list of keys to export (default: all)")
+	cmd.Flags().String("env-file", "", "update or append exported secrets in a .env file without removing other lines")
+	cmd.Flags().StringSlice("keys", nil, "only export these comma-separated key names; errors if any key is missing (default: all keys)")
 	return cmd
 }
 

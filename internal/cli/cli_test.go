@@ -1657,6 +1657,36 @@ func TestExport_EnvFile_KeysFilter(t *testing.T) {
 	}
 }
 
+func TestExport_KeysFilterMissingKeyErrors(t *testing.T) {
+	app, store, _, _ := newTestAppWithBulk()
+	if err := store.Set("default", "A", "one"); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := executeCmd(app, "export", "--keys", "A,MISSING")
+	if err == nil {
+		t.Fatal("expected missing key error")
+	}
+	if got := err.Error(); !strings.Contains(got, `requested key "MISSING" not found in vault`) {
+		t.Fatalf("error = %q, want missing key message", got)
+	}
+}
+
+func TestExport_HelpDescribesEnvFileAndKeys(t *testing.T) {
+	app, _, _, _ := newTestAppWithBulk()
+
+	stdout, _, err := executeCmd(app, "export", "--help")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(stdout, "update or append exported secrets in a .env file without removing other lines") {
+		t.Fatalf("help output = %q, want descriptive --env-file text", stdout)
+	}
+	if !strings.Contains(stdout, "only export these comma-separated key names; errors if any key is missing") {
+		t.Fatalf("help output = %q, want descriptive --keys text", stdout)
+	}
+}
+
 func TestExport_EnvFile_MutuallyExclusiveWithOutput(t *testing.T) {
 	app, store, _, _ := newTestAppWithBulk()
 	if err := store.Set("default", "FOO", "new"); err != nil {
@@ -1668,7 +1698,7 @@ func TestExport_EnvFile_MutuallyExclusiveWithOutput(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected mutually exclusive flags error")
 	}
-	if got := err.Error(); got != "export: --env-file and --output are mutually exclusive" {
+	if got := err.Error(); got != "export: choose either --env-file to update an existing .env file or --output to write a new export, not both" {
 		t.Fatalf("error = %q, want mutually exclusive error", got)
 	}
 }
