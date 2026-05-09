@@ -2,6 +2,7 @@ package envutil
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -114,6 +115,9 @@ func UpsertEnvFile(path string, entries map[string]string) (updated, appended in
 		if !ok {
 			continue
 		}
+		if seen[key] {
+			continue
+		}
 		value, exists := entries[key]
 		if !exists {
 			continue
@@ -131,28 +135,28 @@ func UpsertEnvFile(path string, entries map[string]string) (updated, appended in
 		appended++
 	}
 
-	output := JoinLines(lines)
+	output := joinEnvFileLines(lines, lineEnding(content))
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
 	if err != nil {
-		return updated, appended, err
+		return updated, appended, fmt.Errorf("create temp file: %w", err)
 	}
 	tmpPath := tmp.Name()
 	defer os.Remove(tmpPath)
 
 	if _, err := tmp.WriteString(output); err != nil {
 		_ = tmp.Close()
-		return updated, appended, err
+		return updated, appended, fmt.Errorf("write temp file: %w", err)
 	}
 	if err := tmp.Chmod(0o600); err != nil {
 		_ = tmp.Close()
-		return updated, appended, err
+		return updated, appended, fmt.Errorf("chmod temp file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		return updated, appended, err
+		return updated, appended, fmt.Errorf("close temp file: %w", err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
-		return updated, appended, err
+		return updated, appended, fmt.Errorf("replace env file: %w", err)
 	}
 	return updated, appended, nil
 }
@@ -162,10 +166,32 @@ func splitEnvFileLines(content string) []string {
 		return nil
 	}
 	lines := strings.Split(content, "\n")
+	for i := range lines {
+		lines[i] = strings.TrimSuffix(lines[i], "\r")
+	}
 	if lines[len(lines)-1] == "" {
 		return lines[:len(lines)-1]
 	}
 	return lines
+}
+
+func joinEnvFileLines(lines []string, newline string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, line := range lines {
+		b.WriteString(line)
+		b.WriteString(newline)
+	}
+	return b.String()
+}
+
+func lineEnding(content string) string {
+	if strings.Contains(content, "\r\n") {
+		return "\r\n"
+	}
+	return "\n"
 }
 
 func upsertableKey(line string) (string, bool) {

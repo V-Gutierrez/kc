@@ -125,6 +125,71 @@ func TestUpsertEnvFile_AppendsMissingKeysAtEnd(t *testing.T) {
 	assertFileContent(t, path, "FOO=old\nBAR=new\n")
 }
 
+func TestUpsertEnvFile_AppendsToEmptyFile(t *testing.T) {
+	path := writeTempEnvFile(t, "")
+
+	updated, appended, err := UpsertEnvFile(path, map[string]string{"FOO": "new"})
+	if err != nil {
+		t.Fatalf("UpsertEnvFile() error = %v", err)
+	}
+	if updated != 0 || appended != 1 {
+		t.Fatalf("counts = (%d, %d), want (0, 1)", updated, appended)
+	}
+	assertFileContent(t, path, "FOO=new\n")
+}
+
+func TestUpsertEnvFile_AppendsAfterFileWithoutTrailingNewline(t *testing.T) {
+	path := writeTempEnvFile(t, "FOO=old")
+
+	updated, appended, err := UpsertEnvFile(path, map[string]string{"BAR": "new"})
+	if err != nil {
+		t.Fatalf("UpsertEnvFile() error = %v", err)
+	}
+	if updated != 0 || appended != 1 {
+		t.Fatalf("counts = (%d, %d), want (0, 1)", updated, appended)
+	}
+	assertFileContent(t, path, "FOO=old\nBAR=new\n")
+}
+
+func TestUpsertEnvFile_PreservesWindowsLineEndings(t *testing.T) {
+	path := writeTempEnvFile(t, "FOO=old\r\nBAR=keep\r\n")
+
+	updated, appended, err := UpsertEnvFile(path, map[string]string{"FOO": "new", "BAZ": "added"})
+	if err != nil {
+		t.Fatalf("UpsertEnvFile() error = %v", err)
+	}
+	if updated != 1 || appended != 1 {
+		t.Fatalf("counts = (%d, %d), want (1, 1)", updated, appended)
+	}
+	assertFileContent(t, path, "FOO=new\r\nBAR=keep\r\nBAZ=added\r\n")
+}
+
+func TestUpsertEnvFile_UpdatesOnlyFirstDuplicateKey(t *testing.T) {
+	path := writeTempEnvFile(t, "FOO=old\nFOO=local-override\n")
+
+	updated, appended, err := UpsertEnvFile(path, map[string]string{"FOO": "new"})
+	if err != nil {
+		t.Fatalf("UpsertEnvFile() error = %v", err)
+	}
+	if updated != 1 || appended != 0 {
+		t.Fatalf("counts = (%d, %d), want (1, 0)", updated, appended)
+	}
+	assertFileContent(t, path, "FOO=new\nFOO=local-override\n")
+}
+
+func TestUpsertEnvFile_HandlesEqualsInValueAndEmptyValue(t *testing.T) {
+	path := writeTempEnvFile(t, "URL=old\nEMPTY=old\n")
+
+	updated, appended, err := UpsertEnvFile(path, map[string]string{"URL": "postgres://u:p@host/db?sslmode=require", "EMPTY": ""})
+	if err != nil {
+		t.Fatalf("UpsertEnvFile() error = %v", err)
+	}
+	if updated != 2 || appended != 0 {
+		t.Fatalf("counts = (%d, %d), want (2, 0)", updated, appended)
+	}
+	assertFileContent(t, path, "URL=\"postgres://u:p@host/db?sslmode=require\"\nEMPTY=\n")
+}
+
 func TestUpsertEnvFile_MixedUpdateUncommentAppend(t *testing.T) {
 	path := writeTempEnvFile(t, "# header\nFOO=old\n# BAR=old\nBAZ=keep\n")
 
