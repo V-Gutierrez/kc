@@ -96,6 +96,7 @@ func NewRootCmd(app *App) *cobra.Command {
 		newCompletionCmd(),
 		newRunCmd(app),
 		newInjectCmd(app),
+		newResolveCmd(app),
 	)
 
 	return root
