@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.1.0]
+
+- Added `kc resolve` command — native Consi/OpenClaw exec provider protocol for batch secret resolution.
+- Single Keychain session resolves multiple keys via JSON stdin/stdout.
+- Protected keys trigger a single Touch ID prompt before resolution.
+
 ## [v0.4.0]
 
 - Added a Touch ID boot-session grace period for protected reads, cached until logout or restart.
