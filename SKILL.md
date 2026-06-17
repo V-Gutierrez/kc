@@ -80,6 +80,11 @@ kc import .env
 # Export to .env file
 kc export -o .env
 
+# Consi/OpenClaw batch resolution (exec provider protocol)
+echo '{"protocolVersion":1,"provider":"kc","ids":["OPENAI_API_KEY","NVIDIA_API_KEY"]}' | kc resolve
+echo '{"protocolVersion":1,"provider":"kc","ids":["OPENAI_API_KEY"]}' | kc resolve --no-touch-id
+echo '{"protocolVersion":1,"provider":"kc","ids":["OPENAI_API_KEY"]}' | kc resolve --vault prod
+
 # Interactive TUI
 kc
 ```
@@ -103,10 +108,12 @@ Prefer `kc run` for running processes. Use `eval "$(kc env)"` only for interacti
 | `eval "$(kc env)"` | Interactive shell setup (`.zshrc`) or dev sessions |
 | `kc get KEY` | Reading a secret for display/clipboard |
 | `kc set KEY` | Storing new secrets interactively |
+| `kc resolve` | Batch resolution via stdin JSON (Consi/OpenClaw protocol) |
 
 ## Notes
 
 - macOS only (uses native Keychain + Touch ID)
-- First `kc get` per boot session prompts Touch ID, then cached
+- First `kc get` per boot session prompts Touch ID, then cached at `/tmp/kc-session-<UID>`
+- `kc resolve --no-touch-id` skips Touch ID for non-interactive callers (Consi gateway startup)
 - Secrets never leave Apple's encryption stack
 - `kc run` requires `--` separator before the command

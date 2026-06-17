@@ -15,6 +15,7 @@
   <a href="#install">Install</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#commands">Commands</a> •
+  <a href="#resolve-consi-integration">Consi/OpenClaw</a> •
   <a href="#touch-id">Touch ID</a> •
   <a href="#vaults">Vaults</a> •
   <a href="#shell-integration">Shell Integration</a> •
@@ -125,10 +126,85 @@ kc diff prod staging
 | `kc vault list` | List all vaults |
 | `kc vault create <name>` | Create a new vault |
 | `kc vault switch <name>` | Set active vault |
+| `kc resolve` | Resolve batch secret IDs via stdin JSON (Consi/OpenClaw protocol) |
+| `kc resolve --no-touch-id` | Resolve without Touch ID (for non-interactive gateways) |
+
+## Consi/OpenClaw Integration
+
+`kc resolve` implements the exec provider protocol so Consi/OpenClaw can read secrets without storing plaintext credentials in config files.
+
+### Setup
+
+Add a provider definition to `~/.consi/consi.json` (or `openclaw.json`):
+
+```json
+{
+  "secrets": {
+    "providers": {
+      "kc": {
+        "source": "exec",
+        "command": "/opt/homebrew/bin/kc",
+        "args": ["resolve", "--no-touch-id"],
+        "timeoutMs": 10000,
+        "allowSymlinkCommand": true,
+        "trustedDirs": ["/opt/homebrew"]
+      }
+    }
+  }
+}
+```
+
+Then reference secrets in model provider configs:
+
+```json
+{
+  "models": {
+    "providers": {
+      "openai": {
+        "apiKey": { "source": "exec", "provider": "kc", "id": "OPENAI_API_KEY" }
+      },
+      "nvidia": {
+        "apiKey": { "source": "exec", "provider": "kc", "id": "NVIDIA_API_KEY" }
+      },
+      "openrouter": {
+        "apiKey": { "source": "exec", "provider": "kc", "id": "OPENROUTER_API_KEY" }
+      }
+    }
+  }
+}
+```
+
+### Non-interactive mode
+
+`--no-touch-id` skips the Touch ID prompt so the Consi/OpenClaw gateway can start without user interaction. Protected keys are still resolved — the Keychain itself does not gate reads at the OS level. The protection flag is kc's own UI-level gate, and bypassing it with `--no-touch-id` is intentional for automated callers.
+
+Without this flag, the gateway blocks on a Touch ID prompt at startup and fails with `SECRETS_RELOADER_DEGRADED` if no user is present to authenticate.
+
+### Homebrew symlink
+
+Homebrew installs kc as a symlink (`/opt/homebrew/bin/kc` → `../Cellar/kc/<version>/bin/kc`). Consi/OpenClaw rejects symlinked exec provider commands by default. Add `allowSymlinkCommand: true` and `trustedDirs: ["/opt/homebrew"]` to the provider config.
+
+### Protocol
+
+```
+stdin:  {"protocolVersion":1,"provider":"kc","ids":["KEY1","KEY2"]}
+stdout: {"protocolVersion":1,"values":{"KEY1":"val1","KEY2":null}}
+```
+
+Unknown keys return `null`. Protected keys without `--no-touch-id` trigger a single Touch ID prompt before batch resolution. Timestamp field is accepted but ignored (kc has no TTL/rotation).
+
+### Security model
+
+- Secrets leave the Keychain only into the requesting process's stdout — no temp files, no env vars, no disk write.
+- The caller (Consi) holds resolved secrets in an in-memory snapshot. kc does not retain values after the response.
+- `--no-touch-id` delegates the trust decision to the caller. Use it only for trusted automation.
+- For interactive use, omit the flag to require physical presence via Touch ID.
 
 ## Touch ID
 
-**v0.4.0** keeps Touch ID protection on by default and adds a boot-session grace period for protected reads. After the first successful unlock, `kc` caches the current macOS boot session in `$TMPDIR`, so subsequent protected reads skip the prompt until you log out or restart.
+**v0.4.0** keeps Touch ID protection on by default and adds a boot-session grace period for protected reads. After the first successful unlock, `kc` caches the current macOS boot session in `$TMPDIR/kc-session-<UID>`, so subsequent protected reads skip the prompt until you log out or restart.
+
+All read-sensitive commands share this cache: `kc get`, `kc env`, `kc export`, `kc list --show-values`, `kc search --show-values`, and `kc resolve` (without `--no-touch-id`).
 
 ```bash
 # Default: Touch ID required
@@ -140,8 +216,12 @@ kc set PUBLIC_KEY "not-sensitive" --no-protect
 # First protected read prompts Touch ID
 kc get DB_PASSWORD
 
-# Later protected reads skip the prompt until logout or restart
-eval "$(kc env)"
+# All subsequent reads skip the prompt — same boot session
+kc resolve < request.json     # skips prompt (cache hit)
+eval "$(kc env)"              # skips prompt (cache hit)
+
+# Non-interactive callers use --no-touch-id
+kc resolve --no-touch-id < request.json  # skips prompt entirely
 
 # Export follows the same protected-read rule
 kc export > .env

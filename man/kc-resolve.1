@@ -1,0 +1,121 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-resolve - Resolve multiple secret IDs from stdin JSON and print values to stdout
+
+.SH SYNOPSIS
+\fBkc resolve [flags]\fP
+
+.SH DESCRIPTION
+kc resolve implements the Consi/OpenClaw exec provider protocol for batch secret resolution.
+
+Reads a JSON request from stdin:
+  {"protocolVersion":1,"provider":"kc","ids":["KEY1","KEY2"]}
+
+Writes a JSON response to stdout:
+  {"protocolVersion":1,"values":{"KEY1":"val1","KEY2":null}}
+
+Unknown keys are returned as null. Protected keys trigger a single Touch ID
+prompt before resolution. Use --no-touch-id to skip Touch ID for
+non-interactive callers (e.g. Consi/OpenClaw gateway startup).
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for resolve
+
+\fB--no-touch-id\fP[=false]
+	skip Touch ID authentication for protected keys
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--vault\fP=""
+	target vault (overrides active vault)
+
+.SH EXAMPLES
+.PP
+\fBecho '{"protocolVersion":1,"provider":"kc","ids":["OPENAI_API_KEY"]}' | kc resolve\fP
+
+.PP
+\fBkc resolve --vault prod < request.json\fP
+
+.PP
+\fBkc resolve --no-touch-id < request.json\fP
+
+.SH SECURITY
+.PP
+\fBkc resolve\fP is designed for both interactive and non-interactive use:
+
+.IP \(bu 2
+\fBInteractive\fP (default): If any requested key is protected, kc triggers a
+single Touch ID prompt. After successful authentication, the macOS boot-session
+token is cached in $TMPDIR. Subsequent resolve calls within the same boot
+session skip the prompt.
+.IP \(bu 2
+\fBNon-interactive\fP (\fB--no-touch-id\fP): Skips Touch ID entirely.
+Protected keys ARE still resolved (the Keychain does not gate reads at the OS
+level). Use this for automated callers like Consi/OpenClaw gateway startup that
+cannot respond to a Touch ID prompt. The caller is responsible for trust
+boundary decisions.
+.IP \(bu 2
+\fBTimeout\fP: Touch ID prompts have a 30-second timeout. If the user does not
+authenticate, the command fails and outputs an error to stderr.
+
+.SH BOOT SESSION CACHE
+.PP
+After the first successful Touch ID authentication, kc writes a boot-session
+token to \fB/tmp/kc-session-<UID>\fP containing the current
+\fBkern.boottime\fP value. This token is valid until logout or restart.
+
+Calls to \fBkc get\fP, \fBkc env\fP, \fBkc export\fP, \fBkc list
+--show-values\fP, \fBkc search --show-values\fP, and \fBkc resolve\fP all
+share this cache — one fingerprint per boot session.
+
+.SH CONS/OPENCLAW INTEGRATION
+.PP
+To use kc as a Consi/OpenClaw exec provider:
+
+.nf
+{
+  "secrets": {
+    "providers": {
+      "kc": {
+        "source": "exec",
+        "command": "/opt/homebrew/bin/kc",
+        "args": ["resolve", "--no-touch-id"],
+        "timeoutMs": 10000,
+        "allowSymlinkCommand": true,
+        "trustedDirs": ["/opt/homebrew"]
+      }
+    }
+  }
+}
+.fi
+
+.PP
+Then reference secrets in model provider configs:
+
+.nf
+{
+  "models": {
+    "providers": {
+      "openai": {
+        "apiKey": { "source": "exec", "provider": "kc", "id": "OPENAI_API_KEY" }
+      }
+    }
+  }
+}
+.fi
+
+.PP
+\fBImportant:\fP The \fB--no-touch-id\fP flag is required for non-interactive
+gateway startup. Without it, the gateway blocks on a Touch ID prompt and
+fails with SECRETS_RELOADER_DEGRADED if the user is not present.
+
+.PP
+Homebrew installs kc as a symlink (\fB/opt/homebrew/bin/kc\fP →
+\fB../Cellar/kc/<version>/bin/kc\fP). The Consi/OpenClaw exec provider
+requires \fBallowSymlinkCommand: true\fP and \fBtrustedDirs\fP for
+symlinked command paths.
+
+.SH SEE ALSO
+\fBkc(1)\fP, \fBkc-get(1)\fP, \fBkc-env(1)\fP

@@ -37,16 +37,19 @@ Writes a JSON response to stdout:
   {"protocolVersion":1,"values":{"KEY1":"val1","KEY2":null}}
 
 Unknown keys are returned as null. Protected keys trigger a single Touch ID
-prompt before resolution.
+prompt before resolution. Use --no-touch-id to skip Touch ID for non-interactive
+callers (e.g. Consi gateway startup).
 
 Examples:
   echo '{"protocolVersion":1,"provider":"kc","ids":["OPENAI_API_KEY"]}' | kc resolve
-  kc resolve --vault prod < request.json`,
+  kc resolve --vault prod < request.json
+  kc resolve --no-touch-id < request.json`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runResolve(cmd, app)
 		},
 	}
+	cmd.Flags().Bool("no-touch-id", false, "skip Touch ID authentication for protected keys")
 	return cmd
 }
 
@@ -80,14 +83,17 @@ func runResolve(cmd *cobra.Command, app *App) error {
 	}
 
 	// Check protection: if any requested key is protected, trigger Touch ID once.
-	metadata, err := app.Store.ListMetadata(vault)
-	if err != nil {
-		return fmt.Errorf("resolve: list metadata: %w", err)
-	}
-	if anyProtected(metadata, req.IDs) {
-		session := authSession(app)
-		if err := session.Authorize("Unlock kc secrets"); err != nil {
-			return err
+	noTouchID, _ := cmd.Flags().GetBool("no-touch-id")
+	if !noTouchID {
+		metadata, err := app.Store.ListMetadata(vault)
+		if err != nil {
+			return fmt.Errorf("resolve: list metadata: %w", err)
+		}
+		if anyProtected(metadata, req.IDs) {
+			session := authSession(app)
+			if err := session.Authorize("Unlock kc secrets"); err != nil {
+				return err
+			}
 		}
 	}
 
