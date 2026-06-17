@@ -84,7 +84,8 @@ To use kc as a Consi/OpenClaw exec provider:
         "args": ["resolve", "--no-touch-id"],
         "timeoutMs": 10000,
         "allowSymlinkCommand": true,
-        "trustedDirs": ["/opt/homebrew"]
+        "trustedDirs": ["/opt/homebrew"],
+        "passEnv": ["HOME", "PATH"]
       }
     }
   }
@@ -110,6 +111,18 @@ Then reference secrets in model provider configs:
 \fBImportant:\fP The \fB--no-touch-id\fP flag is required for non-interactive
 gateway startup. Without it, the gateway blocks on a Touch ID prompt and
 fails with SECRETS_RELOADER_DEGRADED if the user is not present.
+
+.PP
+\fBEnvironment:\fP Consi/OpenClaw runs exec providers in a minimal
+environment. \fBpassEnv: ["HOME", "PATH"]\fP is \fIrequired\fP for kc to
+function:\fP
+.IP \(bu 2
+\fBHOME\fP is needed to locate the user's Keychain
+(\fB~/Library/Keychains/login.keychain-db\fP). Without it, \fBsecurity(1)\fP
+cannot access stored items and all secrets resolve to null.
+.IP \(bu 2
+\fBPATH\fP is needed to locate the \fBsecurity(1)\fP CLI
+(\fB/usr/bin/security\fP) that kc wraps.
 
 .PP
 Homebrew installs kc as a symlink (\fB/opt/homebrew/bin/kc\fP →

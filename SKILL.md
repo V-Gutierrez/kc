@@ -115,5 +115,6 @@ Prefer `kc run` for running processes. Use `eval "$(kc env)"` only for interacti
 - macOS only (uses native Keychain + Touch ID)
 - First `kc get` per boot session prompts Touch ID, then cached at `/tmp/kc-session-<UID>`
 - `kc resolve --no-touch-id` skips Touch ID for non-interactive callers (Consi gateway startup)
+- Consi/OpenClaw exec provider requires `passEnv: ["HOME", "PATH"]` — without `HOME`, Keychain access fails
 - Secrets never leave Apple's encryption stack
 - `kc run` requires `--` separator before the command

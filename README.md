@@ -147,7 +147,8 @@ Add a provider definition to `~/.consi/consi.json` (or `openclaw.json`):
         "args": ["resolve", "--no-touch-id"],
         "timeoutMs": 10000,
         "allowSymlinkCommand": true,
-        "trustedDirs": ["/opt/homebrew"]
+        "trustedDirs": ["/opt/homebrew"],
+        "passEnv": ["HOME", "PATH"]
       }
     }
   }
@@ -183,6 +184,10 @@ Without this flag, the gateway blocks on a Touch ID prompt at startup and fails 
 ### Homebrew symlink
 
 Homebrew installs kc as a symlink (`/opt/homebrew/bin/kc` → `../Cellar/kc/<version>/bin/kc`). Consi/OpenClaw rejects symlinked exec provider commands by default. Add `allowSymlinkCommand: true` and `trustedDirs: ["/opt/homebrew"]` to the provider config.
+
+### Environment
+
+Consi runs exec providers in a minimal environment for security. `kc` needs `HOME` to locate the user's Keychain and `PATH` to find the `security` CLI. Always include `passEnv: ["HOME", "PATH"]` in the provider config. Without `HOME`, Keychain access fails silently and all secrets resolve to `null`.
 
 ### Protocol
 
