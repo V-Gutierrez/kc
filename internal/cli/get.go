@@ -26,14 +26,16 @@ func newGetCmd(app *App) *cobra.Command {
 				return err
 			}
 			key := args[0]
-			metadata, err := app.Store.ListMetadata(vault)
-			if err != nil {
-				return fmt.Errorf("failed to inspect %q in vault %q: %w", key, vault, err)
-			}
-			if isProtected(metadata, key) {
-				session := authSession(app)
-				if err := session.Authorize("Unlock kc secret"); err != nil {
-					return err
+			if !shouldSkipAuth(cmd) {
+				metadata, err := app.Store.ListMetadata(vault)
+				if err != nil {
+					return fmt.Errorf("failed to inspect %q in vault %q: %w", key, vault, err)
+				}
+				if isProtected(metadata, key) {
+					session := authSession(app)
+					if err := session.Authorize("Unlock kc secret"); err != nil {
+						return err
+					}
 				}
 			}
 
@@ -61,6 +63,7 @@ func newGetCmd(app *App) *cobra.Command {
 		},
 	}
 	cmd.Flags().Bool("json", false, "output structured JSON")
+	cmd.Flags().Bool("no-touch-id", false, "skip Touch ID authentication for protected keys")
 	return cmd
 }
 

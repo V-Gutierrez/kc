@@ -35,17 +35,19 @@ func newRunCmd(app *App) *cobra.Command {
 				return err
 			}
 
-			metadata, err := app.Store.ListMetadata(vault)
-			if err != nil {
-				return fmt.Errorf("run: %w", err)
-			}
-			for _, item := range metadata {
-				if item.Protection == ProtectionProtected {
-					session := authSession(app)
-					if err := session.Authorize("Unlock kc secrets"); err != nil {
-						return err
+			if !shouldSkipAuth(cmd) {
+				metadata, err := app.Store.ListMetadata(vault)
+				if err != nil {
+					return fmt.Errorf("run: %w", err)
+				}
+				for _, item := range metadata {
+					if item.Protection == ProtectionProtected {
+						session := authSession(app)
+						if err := session.Authorize("Unlock kc secrets"); err != nil {
+							return err
+						}
+						break
 					}
-					break
 				}
 			}
 
@@ -66,6 +68,7 @@ func newRunCmd(app *App) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().Bool("no-touch-id", false, "skip Touch ID authentication for protected keys")
 	return cmd
 }
 
