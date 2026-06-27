@@ -22,14 +22,16 @@ func newInjectCmd(app *App) *cobra.Command {
 				return err
 			}
 
-			metadata, err := app.Store.ListMetadata(vault)
-			if err != nil {
-				return fmt.Errorf("inject: %w", err)
-			}
-			if isProtected(metadata, key) {
-				session := authSession(app)
-				if err := session.Authorize("Unlock kc secret"); err != nil {
-					return err
+			if !shouldSkipAuth(cmd) {
+				metadata, err := app.Store.ListMetadata(vault)
+				if err != nil {
+					return fmt.Errorf("inject: %w", err)
+				}
+				if isProtected(metadata, key) {
+					session := authSession(app)
+					if err := session.Authorize("Unlock kc secret"); err != nil {
+						return err
+					}
 				}
 			}
 
@@ -43,6 +45,7 @@ func newInjectCmd(app *App) *cobra.Command {
 		},
 	}
 	cmd.Flags().String("key", "", "secret key to retrieve")
+	cmd.Flags().Bool("no-touch-id", false, "skip Touch ID authentication for protected keys")
 	_ = cmd.MarkFlagRequired("key")
 	return cmd
 }

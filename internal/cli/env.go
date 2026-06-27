@@ -7,7 +7,7 @@ import (
 )
 
 func newEnvCmd(app *App) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "env",
 		Short: "Print shell export statements for all secrets in the active vault",
 		Args:  cobra.NoArgs,
@@ -16,21 +16,23 @@ func newEnvCmd(app *App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			metadata, err := app.Store.ListMetadata(vault)
-			if err != nil {
-				return fmt.Errorf("env: %w", err)
-			}
-			requiresAuth := false
-			for _, item := range metadata {
-				if item.Protection == ProtectionProtected {
-					requiresAuth = true
-					break
+			if !shouldSkipAuth(cmd) {
+				metadata, err := app.Store.ListMetadata(vault)
+				if err != nil {
+					return fmt.Errorf("env: %w", err)
 				}
-			}
-			if requiresAuth {
-				session := authSession(app)
-				if err := session.Authorize("Unlock kc secrets"); err != nil {
-					return err
+				requiresAuth := false
+				for _, item := range metadata {
+					if item.Protection == ProtectionProtected {
+						requiresAuth = true
+						break
+					}
+				}
+				if requiresAuth {
+					session := authSession(app)
+					if err := session.Authorize("Unlock kc secrets"); err != nil {
+						return err
+					}
 				}
 			}
 			entries, err := app.Bulk.GetAll(vault)
@@ -43,4 +45,6 @@ func newEnvCmd(app *App) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().Bool("no-touch-id", false, "skip Touch ID authentication for protected keys")
+	return cmd
 }
