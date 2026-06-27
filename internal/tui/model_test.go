@@ -841,6 +841,97 @@ func TestBookmarkTogglePersistsAndPinsEntry(t *testing.T) {
 	}
 }
 
+func TestUpsertEntryNewItemAppearsOnce(t *testing.T) {
+	m := NewModel(Deps{})
+	m.entries = []entry{
+		{Vault: "default", Key: "ALPHA", Protection: protectionProtected},
+	}
+
+	m.upsertEntry(entry{Vault: "default", Key: "BRAVO", Protection: protectionProtected})
+
+	if len(m.entries) != 2 {
+		t.Fatalf("entries = %d, want 2", len(m.entries))
+	}
+	if m.entries[0].Key != "ALPHA" || m.entries[1].Key != "BRAVO" {
+		t.Fatalf("entries = %v, want sorted ALPHA, BRAVO", m.entries)
+	}
+}
+
+func TestUpsertEntrySameIdentityReplacesEvenWhenProtectionChanges(t *testing.T) {
+	m := NewModel(Deps{})
+	original := entry{Vault: "default", Key: "TOKEN", Protection: protectionProtected, Modified: "2025-01-01"}
+	m.entries = []entry{original}
+
+	updated := entry{Vault: "default", Key: "TOKEN", Protection: protectionUnprotected, Modified: "2025-06-01"}
+	m.upsertEntry(updated)
+
+	if len(m.entries) != 1 {
+		t.Fatalf("entries = %d, want 1 (no duplicate)", len(m.entries))
+	}
+	if m.entries[0].Protection != protectionUnprotected {
+		t.Fatalf("protection = %q, want %q", m.entries[0].Protection, protectionUnprotected)
+	}
+}
+
+func TestUpsertEntrySameIdentityReplacesWhenNoFieldsChange(t *testing.T) {
+	m := NewModel(Deps{})
+	original := entry{Vault: "default", Key: "TOKEN", Protection: protectionProtected}
+	m.entries = []entry{original}
+
+	same := entry{Vault: "default", Key: "TOKEN", Protection: protectionProtected}
+	m.upsertEntry(same)
+
+	if len(m.entries) != 1 {
+		t.Fatalf("entries = %d, want 1 (no duplicate)", len(m.entries))
+	}
+	if m.entries[0].Protection != protectionProtected {
+		t.Fatalf("protection = %q, want %q", m.entries[0].Protection, protectionProtected)
+	}
+}
+
+func TestUpsertEntryDifferentVaultCreatesNewEntry(t *testing.T) {
+	m := NewModel(Deps{})
+	m.entries = []entry{
+		{Vault: "default", Key: "TOKEN", Protection: protectionProtected},
+	}
+
+	m.upsertEntry(entry{Vault: "prod", Key: "TOKEN", Protection: protectionProtected})
+
+	if len(m.entries) != 2 {
+		t.Fatalf("entries = %d, want 2", len(m.entries))
+	}
+}
+
+func TestUpsertEntryDifferentKeyCreatesNewEntry(t *testing.T) {
+	m := NewModel(Deps{})
+	m.entries = []entry{
+		{Vault: "default", Key: "TOKEN", Protection: protectionProtected},
+	}
+
+	m.upsertEntry(entry{Vault: "default", Key: "API_KEY", Protection: protectionProtected})
+
+	if len(m.entries) != 2 {
+		t.Fatalf("entries = %d, want 2", len(m.entries))
+	}
+}
+
+func TestUpsertEntryMaintainsSortedOrder(t *testing.T) {
+	m := NewModel(Deps{})
+	m.entries = []entry{
+		{Vault: "default", Key: "CHARLIE", Protection: protectionProtected},
+		{Vault: "default", Key: "ALPHA", Protection: protectionProtected},
+	}
+
+	m.upsertEntry(entry{Vault: "default", Key: "BRAVO", Protection: protectionProtected})
+
+	if len(m.entries) != 3 {
+		t.Fatalf("entries = %d, want 3", len(m.entries))
+	}
+	if m.entries[0].Key != "ALPHA" || m.entries[1].Key != "BRAVO" || m.entries[2].Key != "CHARLIE" {
+		t.Fatalf("entries = %v, want sorted ALPHA, BRAVO, CHARLIE", m.entries)
+	}
+}
+
 func TestCopyHistorySummaryTracksLastThreeCopies(t *testing.T) {
 	m := NewModel(Deps{Store: newMockStore()})
 	m.recordCopy(entry{Vault: "default", Key: "ONE"})

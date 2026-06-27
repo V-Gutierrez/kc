@@ -453,7 +453,7 @@ func (m *Model) clearPreview() {
 
 func (m *Model) upsertEntry(item entry) {
 	for i, existing := range m.entries {
-		if existing == item {
+		if existing.Vault == item.Vault && existing.Key == item.Key {
 			m.entries[i] = item
 			return
 		}
