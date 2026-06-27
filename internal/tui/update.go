@@ -252,9 +252,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.mode = modeEdit
-		value := ""
-		if m.preview.revealed && m.preview.vault == selected.Vault && m.preview.key == selected.Key {
-			value = m.preview.value
+		value, err := m.deps.Store.Get(selected.Vault, selected.Key)
+		if err != nil {
+			if m.preview.revealed && m.preview.vault == selected.Vault && m.preview.key == selected.Key {
+				value = m.preview.value
+			}
 		}
 		m.form = newFormState(selected.Vault, selected.Key, value)
 		m.form.isProtected = selected.Protection != protectionUnprotected
@@ -328,9 +330,11 @@ func (m Model) executeDoubleVim(keyName string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.mode = modeEdit
-		value := ""
-		if m.preview.revealed && m.preview.vault == selected.Vault && m.preview.key == selected.Key {
-			value = m.preview.value
+		value, err := m.deps.Store.Get(selected.Vault, selected.Key)
+		if err != nil {
+			if m.preview.revealed && m.preview.vault == selected.Vault && m.preview.key == selected.Key {
+				value = m.preview.value
+			}
 		}
 		m.form = newFormState(selected.Vault, selected.Key, value)
 		m.form.isProtected = selected.Protection != protectionUnprotected
