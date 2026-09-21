@@ -56,6 +56,9 @@ func (m Model) View() string {
 	if m.mode == modeCommandPalette {
 		right = m.commandPaletteView()
 	}
+	if m.mode == modeHistory {
+		right = m.historyView()
+	}
 
 	leftWidth := max(40, m.width/2)
 	rightWidth := max(30, m.width/2-4)
@@ -67,7 +70,7 @@ func (m Model) View() string {
 			lipgloss.NewStyle().Width(leftWidth).Render(left),
 			lipgloss.NewStyle().PaddingLeft(2).Width(rightWidth).Render(right),
 		)
-	} else if m.mode == modeAdd || m.mode == modeEdit || m.mode == modeConfirmDelete || m.mode == modeHelp || m.mode == modeCreateVault || m.mode == modeVaultPicker || m.mode == modeCommandPalette {
+	} else if m.mode == modeAdd || m.mode == modeEdit || m.mode == modeConfirmDelete || m.mode == modeHelp || m.mode == modeCreateVault || m.mode == modeVaultPicker || m.mode == modeCommandPalette || m.mode == modeHistory {
 		body = lipgloss.NewStyle().Width(max(40, m.width-4)).Render(right)
 	}
 
@@ -133,6 +136,8 @@ func (m Model) contextualHints() string {
 		return "Enter select • Esc cancel"
 	case modeCommandPalette:
 		return "Enter run • Esc cancel"
+	case modeHistory:
+		return "j/k move • Enter copy version • r restore • Esc back"
 	}
 	return "/ search  : cmd  ? help"
 }
@@ -226,7 +231,7 @@ func (m Model) previewView() string {
 			m.styles.normal.Render(renderModified(item.Modified)),
 			"",
 			m.styles.subtle.Render("─── Actions ───"),
-			m.styles.help.Render("[Enter] Reveal  [yy] Copy  [cc] Edit  [dd] Delete  [*] Bookmark"),
+			m.styles.help.Render("[Enter] Reveal  [yy] Copy  [cc] Edit  [h] History  [dd] Delete  [*] Bookmark"),
 		)
 	} else {
 		lines = append(lines, m.styles.subtle.Render("No key selected"))
@@ -412,6 +417,7 @@ func (m Model) helpOverlayView() string {
 			"a          Add new key",
 			"cc         Edit selected key",
 			"dd         Delete selected key",
+			"h          History of selected key",
 		}},
 		{"Vaults", []string{
 			"Tab        Next vault filter",
@@ -572,4 +578,89 @@ func chiefsBorder(width int, styles styles) string {
 		b.WriteString(styles.borderGold.Render(segment))
 	}
 	return b.String()
+}
+
+// historyView lists the recorded versions of one secret. Values are never
+// rendered — only the digest, the timestamp and the protection level. Reading a
+// version is an explicit copy to the clipboard, same as the live value.
+func (m Model) historyView() string {
+	title := m.styles.header.Render("History · " + m.history.key)
+	subtitle := m.styles.subtle.Render("vault:" + m.history.vault)
+
+	if m.history.loading {
+		return m.styles.overlay.Render(strings.Join([]string{title, subtitle, "", "Loading versions…"}, "\n"))
+	}
+
+	// A failed read must never be dressed up as an empty history: "no versions"
+	// and "could not reach the Keychain" are opposite facts, and reporting the
+	// first when the second is true is the worst thing this pane could say.
+	if m.err != nil {
+		return m.styles.overlay.Render(strings.Join([]string{
+			title,
+			subtitle,
+			"",
+			m.styles.error.Render("Could not read history: " + m.err.Error()),
+			"",
+			m.styles.subtle.Render("This says nothing about whether versions exist."),
+			"",
+			m.styles.help.Render("[Esc] back"),
+		}, "\n"))
+	}
+
+	if len(m.history.versions) == 0 {
+		return m.styles.overlay.Render(strings.Join([]string{
+			title,
+			subtitle,
+			"",
+			m.styles.subtle.Render("No recorded versions — this secret has not been overwritten since history was enabled."),
+			"",
+			m.styles.help.Render("[Esc] back"),
+		}, "\n"))
+	}
+
+	if m.history.confirming {
+		version, _ := m.history.selected()
+		return m.styles.overlay.Render(strings.Join([]string{
+			m.styles.header.Render("Confirm Restore"),
+			"",
+			fmt.Sprintf("Restore version %d of %s in vault:%s?", version.Seq, m.history.key, m.history.vault),
+			"",
+			m.styles.subtle.Render("The value being replaced is recorded too, so this is reversible."),
+			"",
+			m.styles.help.Render("[Enter] confirm / [Esc] cancel"),
+		}, "\n"))
+	}
+
+	lines := []string{title, subtitle, ""}
+	lines = append(lines, m.styles.previewTitle.Render(fmt.Sprintf("%-4s %-17s %-12s %s", "VER", "RECORDED", "PROTECTION", "DIGEST")))
+	for i, version := range m.history.versions {
+		protection := "unprotected"
+		if version.Protected {
+			protection = "protected"
+		}
+		row := fmt.Sprintf("%-4d %-17s %-12s %s", version.Seq, version.Recorded, protection, shortDigest(version.Digest))
+		if i == m.history.cursor {
+			lines = append(lines, m.styles.selected.Render("▸ "+row))
+		} else {
+			lines = append(lines, m.styles.normal.Render("  "+row))
+		}
+	}
+	lines = append(lines, "")
+	lines = append(lines, m.styles.subtle.Render("Values are shown as digests. Enter copies the real value to the clipboard."))
+	lines = append(lines, "")
+	lines = append(lines, m.styles.activeHelp.Render("j/k: move | Enter: copy version | r: restore | Esc: back"))
+	return m.styles.overlay.Render(strings.Join(lines, "\n"))
+}
+
+// shortDigest trims a Keychain digest to the same 12 characters `kc history`
+// prints. The full SHA-256 wraps the pane and buries the timestamp, and 12
+// characters are already enough to tell two versions apart by eye.
+func shortDigest(digest string) string {
+	if strings.TrimSpace(digest) == "" {
+		return "-"
+	}
+	if len(digest) <= 12 {
+		return digest
+	}
+	return digest[:12]
 }

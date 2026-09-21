@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.4.0]
+
+### Added
+- TUI: `h` opens the version history of the selected key — sequence, timestamp, protection and digest, with `Enter` to copy a recorded value to the clipboard and `r` to restore one after a confirmation. Values are never rendered, only digests. v1.3.0 shipped versioning as a CLI-only surface; this puts it where the secrets are actually browsed.
+- The history shortcut is listed in both the preview pane actions and the help overlay.
+
+### Fixed
+- TUI: a history read that fails now says so. It previously rendered "No recorded versions", reporting an unreachable Keychain as an empty history — the opposite fact.
+- TUI: a successful history load clears an error left over from an earlier action, instead of letting it hide a list that loaded fine.
+- TUI: the history pane shows the same 12-character digest `kc history` prints, rather than the full SHA-256 that wrapped the pane and buried the timestamp.
+
 ## [v1.3.0]
 
 ### Secret versioning

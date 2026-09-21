@@ -176,3 +176,41 @@ func importVaultCmd(deps Deps, vault, path string) tea.Cmd {
 		return importCompletedMsg{vault: vault, path: path, count: count}
 	}
 }
+
+// loadHistoryCmd fetches the recorded versions of one secret. Listing versions
+// reads digests and timestamps only, never the values.
+func loadHistoryCmd(deps Deps, item entry) tea.Cmd {
+	return func() tea.Msg {
+		versions, err := deps.History.Versions(item.Vault, item.Key)
+		return historyLoadedMsg{vault: item.Vault, key: item.Key, versions: versions, err: err}
+	}
+}
+
+// revealVersionCmd copies one recorded value to the clipboard. A previous
+// secret is still a secret, so it goes to the clipboard like a live one and is
+// never rendered.
+func revealVersionCmd(deps Deps, vault, key string, seq int) tea.Cmd {
+	return func() tea.Msg {
+		value, err := deps.History.Value(vault, key, seq)
+		if err != nil {
+			return errMsg{err: err}
+		}
+		if deps.Clipboard != nil {
+			if err := deps.Clipboard.Copy(value); err != nil {
+				return errMsg{err: err}
+			}
+		}
+		return historyValueMsg{seq: seq, value: value}
+	}
+}
+
+// rollbackCmd restores a recorded version as the live value. The restore is
+// itself recorded, so it can be undone the same way.
+func rollbackCmd(deps Deps, vault, key string, seq int) tea.Cmd {
+	return func() tea.Msg {
+		if err := deps.History.Rollback(vault, key, seq); err != nil {
+			return errMsg{err: err}
+		}
+		return rolledBackMsg{vault: vault, key: key, seq: seq}
+	}
+}
