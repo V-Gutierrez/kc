@@ -46,7 +46,11 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 	}
 
 	masked := d.styles.masked.Render(maskedValue(item, d.model.preview))
-	line1 := prefixLabel + " " + titleStyle.Render(item.Key)
+	badge := ""
+	if isStaleCredential(item, d.model.deps.RotationDays) {
+		badge = " " + d.styles.warning.Render(staleBadge)
+	}
+	line1 := prefixLabel + " " + titleStyle.Render(item.Key) + badge
 	line2 := d.styles.vault.Render(item.Vault) + "  " + masked
 	row := line1 + "\n" + line2
 	if index%2 == 1 && index != m.Index() {

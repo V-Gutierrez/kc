@@ -107,6 +107,12 @@ func (m Model) breadcrumb() string {
 	if vault == allVaultsLabel {
 		vault = m.activeVault
 	}
+	// The status bar is the one line that is always on screen — the pane header
+	// scrolls off the top on a normal-height terminal, so a marker only shown
+	// there would not be shown at all.
+	if m.deps.PinnedVault != "" && vault == m.deps.PinnedVault {
+		vault += " (.kc-vault)"
+	}
 
 	selected, ok := m.selectedEntry()
 	if !ok {
@@ -152,7 +158,11 @@ func (m Model) headerView() string {
 	if count == 1 {
 		label = "key"
 	}
-	return m.styles.header.Render(fmt.Sprintf("🔒 kc • vault: %s • %d %s", vault, count, label))
+	header := fmt.Sprintf("🔒 kc • vault: %s • %d %s", vault, count, label)
+	if m.deps.PinnedVault != "" {
+		header += fmt.Sprintf(" • %s pinned by .kc-vault", m.deps.PinnedVault)
+	}
+	return m.styles.header.Render(header)
 }
 
 func (m Model) tabBarView() string {
@@ -229,6 +239,7 @@ func (m Model) previewView() string {
 			"",
 			m.styles.subtle.Render("Modified"),
 			m.styles.normal.Render(renderModified(item.Modified)),
+			stalenessNote(m.styles, item, m.deps.RotationDays),
 			"",
 			m.styles.subtle.Render("─── Actions ───"),
 			m.styles.help.Render("[Enter] Reveal  [yy] Copy  [cc] Edit  [h] History  [dd] Delete  [*] Bookmark"),
@@ -321,9 +332,14 @@ func (m Model) overlayView() string {
 		valueFieldHint = " (F2 to reveal · empty keeps current value)"
 	}
 
+	// Both kinds of failure belong on screen: the validation the form itself
+	// rejected, and the backend error that came back from the write. Without
+	// the second one a failed save looks exactly like Enter doing nothing.
 	formError := ""
 	if m.formError != "" {
 		formError = m.styles.warning.Render("⚠ " + m.formError)
+	} else if m.err != nil {
+		formError = m.styles.error.Render("⚠ " + m.err.Error())
 	}
 
 	content := []string{
@@ -463,6 +479,7 @@ func (m Model) createVaultView() string {
 		"",
 		m.styles.activeHelp.Render("Enter: create | Esc: cancel"),
 	}
+	content = appendError(content, m.styles, m.err)
 	return m.styles.overlay.Render(strings.Join(content, "\n"))
 }
 
@@ -532,7 +549,18 @@ func (m Model) commandPaletteView() string {
 	}
 
 	content = append(content, "", m.styles.activeHelp.Render("Examples: :vault prod  :search stripe  :export ./prod.env  :import ./.env"))
+	content = appendError(content, m.styles, m.err)
 	return m.styles.overlay.Render(strings.Join(content, "\n"))
+}
+
+// appendError puts a backend failure at the bottom of a pane. Every modal that
+// can trigger work needs it: an error recorded on the model but rendered
+// nowhere reads to the user as the key simply not working.
+func appendError(content []string, st styles, err error) []string {
+	if err == nil {
+		return content
+	}
+	return append(content, "", st.error.Render("⚠ "+err.Error()))
 }
 
 func maskedValue(item entry, preview previewState) string {
@@ -663,4 +691,17 @@ func shortDigest(digest string) string {
 		return digest
 	}
 	return digest[:12]
+}
+
+// stalenessNote spells out what the list badge only hints at. The badge tells
+// you something is off; the number is what makes it actionable.
+func stalenessNote(st styles, item entry, rotationDays int) string {
+	if !isStaleCredential(item, rotationDays) {
+		return ""
+	}
+	days, ok := keyAge(item.Modified)
+	if !ok {
+		return ""
+	}
+	return st.warning.Render(fmt.Sprintf("%s not rotated in %d days", staleBadge, days))
 }

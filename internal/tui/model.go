@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -77,6 +78,13 @@ type Deps struct {
 	Clipboard     Clipboard
 	History       History
 	InitialFilter string
+	// PinnedVault is the vault a .kc-vault marker fixes for this directory,
+	// empty when none does. It cannot change while the TUI runs — the working
+	// directory does not move — so it is resolved once at launch.
+	PinnedVault string
+	// RotationDays is the window past which a credential is shown as stale.
+	// Zero falls back to defaultRotationDays.
+	RotationDays int
 }
 
 type entry struct {
@@ -101,6 +109,53 @@ func (e entry) FilterValue() string {
 
 func (e entry) prefix() string {
 	return prefixOf(e.Key)
+}
+
+// staleBadge marks a credential past its rotation window in the list.
+const staleBadge = "⟳"
+
+// defaultRotationDays matches the audit rule's default.
+const defaultRotationDays = 180
+
+// credentialSuffixes are the name endings that make a secret a credential worth
+// rotating. A feature flag going untouched for a year is not a finding.
+var credentialSuffixes = []string{"_KEY", "_TOKEN", "_SECRET", "_PASSWORD"}
+
+// keyAge returns how many days ago the secret was last written, and whether the
+// timestamp could be read at all. An unparseable or missing timestamp is not a
+// claim about age — it is the absence of one.
+func keyAge(modified string) (int, bool) {
+	stamp := strings.TrimSpace(modified)
+	if stamp == "" {
+		return 0, false
+	}
+	when, err := time.Parse("2006-01-02 15:04", stamp)
+	if err != nil {
+		return 0, false
+	}
+	return int(time.Since(when).Hours() / 24), true
+}
+
+// isStaleCredential reports whether a key is a credential that has not been
+// written inside the rotation window. It reads only the metadata the list
+// already holds, so flagging costs no Keychain reads and no Touch ID prompt.
+func isStaleCredential(item entry, rotationDays int) bool {
+	if rotationDays <= 0 {
+		rotationDays = defaultRotationDays
+	}
+	name := strings.ToUpper(item.Key)
+	isCredential := false
+	for _, suffix := range credentialSuffixes {
+		if strings.HasSuffix(name, suffix) {
+			isCredential = true
+			break
+		}
+	}
+	if !isCredential {
+		return false
+	}
+	days, ok := keyAge(item.Modified)
+	return ok && days > rotationDays
 }
 
 type mode int

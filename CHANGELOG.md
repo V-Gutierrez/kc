@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.5.0]
+
+### Fixed
+- TUI: a single `c` copied the secret to the clipboard — and raised Touch ID — before arming the `cc` edit pair, so there was no way to reach the edit form without pushing the secret through the clipboard first. `c`, `d` and `y` now all resolve their single-key action when the pair window closes, never on the first keystroke.
+- TUI: backend failures were rendered nowhere except the preview pane. A failed save, vault creation or palette command left the modal open with no message, so Enter looked like it simply did nothing. Every modal now shows the error, and opening one clears a stale failure from a previous action.
+
+### Added
+- TUI: credentials past the rotation window are marked in the list with `⟳`, and the preview says how many days it has been. Derived from the `Modified` timestamp the list already holds — no secret reads, no Touch ID prompt — and it uses the same `audit.rotation_days` setting as `kc audit`, so the two agree.
+- TUI: when a `.kc-vault` marker fixes the vault for the directory, the status bar says so. Only a directory marker counts; an active vault chosen with `kc vault switch` is not a pin.
+
 ## [v1.4.0]
 
 ### Added

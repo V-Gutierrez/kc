@@ -368,6 +368,8 @@ func TestAddEditAndDeleteFlows(t *testing.T) {
 
 	updatedTea, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	model = updatedTea.(Model)
+	updatedTea, _ = model.Update(vimTimeoutMsg{token: model.pendingVimToken, key: "d"})
+	model = updatedTea.(Model)
 	if model.mode != modeConfirmDelete {
 		t.Fatalf("mode after delete = %v, want modeConfirmDelete", model.mode)
 	}
@@ -482,12 +484,18 @@ func TestCopyCmd(t *testing.T) {
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
 	model = updated.(Model)
 	if cmd == nil {
+		t.Fatal("expected the pending-vim timer")
+	}
+	// c arms the pair window first; the copy is what the window resolves to.
+	updated, cmd = model.Update(cmd())
+	model = updated.(Model)
+	if cmd == nil {
 		t.Fatal("expected copy command")
 	}
 	msg := cmd()
 	updated, _ = model.Update(msg)
 	model = updated.(Model)
-	if clipboard.values[0] != "secret" {
+	if len(clipboard.values) == 0 || clipboard.values[0] != "secret" {
 		t.Fatalf("clipboard = %#v, want secret", clipboard.values)
 	}
 	if model.flashMessage == "" {
@@ -524,6 +532,11 @@ func TestCopyFlashMessageBehavior(t *testing.T) {
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
 	model = updated.(Model)
 
+	if cmd == nil {
+		t.Fatal("expected the pending-vim timer")
+	}
+	updated, cmd = model.Update(cmd())
+	model = updated.(Model)
 	if cmd == nil {
 		t.Fatal("expected copy command")
 	}
@@ -755,14 +768,15 @@ func TestDoubleDDEntersConfirmDeleteMode(t *testing.T) {
 
 	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	model = updated.(Model)
-	if model.mode != modeConfirmDelete {
-		t.Fatalf("mode after first d = %v, want modeConfirmDelete", model.mode)
+	// The first d only arms the pair window — the confirmation belongs to the
+	// resolved keystroke, whether that is dd or the timeout.
+	if model.mode != modeBrowse {
+		t.Fatalf("mode after first d = %v, want modeBrowse", model.mode)
 	}
 	if model.pendingVimKey != "d" {
 		t.Fatalf("pendingVimKey = %q, want d", model.pendingVimKey)
 	}
 
-	model.mode = modeBrowse
 	updated, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 	model = updated.(Model)
 	if cmd != nil {
@@ -790,7 +804,14 @@ func TestSingleCTimeoutStillCopies(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("expected timeout command from first c")
 	}
-	updated, _ = model.Update(cmd())
+	// Two round-trips now: the keystroke arms the timer, and the timer resolves
+	// to the copy. The first c no longer reads the secret on its own.
+	updated, copyCmd := model.Update(cmd())
+	model = updated.(Model)
+	if copyCmd == nil {
+		t.Fatal("expected the timeout to resolve into the copy")
+	}
+	updated, _ = model.Update(copyCmd())
 	_ = updated.(Model)
 	if len(clipboard.values) != 1 || clipboard.values[0] != "secret" {
 		t.Fatalf("clipboard values = %v, want [secret]", clipboard.values)
