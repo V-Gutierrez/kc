@@ -14,8 +14,20 @@ Create a new vault
 
 
 .SH OPTIONS
+\fB--description\fP=""
+	human-readable purpose of the vault
+
+.PP
 \fB-h\fP, \fB--help\fP[=false]
 	help for create
+
+.PP
+\fB--require-protection\fP[=false]
+	reject secrets stored without Touch ID protection
+
+.PP
+\fB--tag\fP=[]
+	tag the vault (repeatable, e.g. --tag env:prod)
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS

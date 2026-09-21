@@ -86,6 +86,35 @@ func saveCmd(deps Deps, item entry, value string) tea.Cmd {
 	}
 }
 
+// saveEntryCmd writes an edited secret. When keepValue is set the value is read
+// back from the origin first, so an untouched form field never blanks a secret.
+// When the target moved (renamed key or different vault) the origin is removed
+// only after the new location is written — a failed second step leaves a
+// duplicate, never a hole.
+func saveEntryCmd(deps Deps, target entry, value string, origin *entry, keepValue bool) tea.Cmd {
+	return func() tea.Msg {
+		if keepValue && origin != nil {
+			current, err := deps.Store.Get(origin.Vault, origin.Key)
+			if err != nil {
+				return errMsg{err: fmt.Errorf("read current value of %s: %w", origin.Key, err)}
+			}
+			value = current
+		}
+		protected := target.Protection == protectionProtected
+		if err := deps.Store.SetWithProtection(target.Vault, target.Key, value, protected); err != nil {
+			return errMsg{err: err}
+		}
+		if origin == nil || (origin.Vault == target.Vault && origin.Key == target.Key) {
+			return savedMsg{entry: target, value: value}
+		}
+		if err := deps.Store.Delete(origin.Vault, origin.Key); err != nil {
+			return errMsg{err: fmt.Errorf("saved %s but could not remove %s from %s: %w", target.Key, origin.Key, origin.Vault, err)}
+		}
+		removed := *origin
+		return savedMsg{entry: target, value: value, removed: &removed}
+	}
+}
+
 func deleteCmd(deps Deps, item entry) tea.Cmd {
 	return func() tea.Msg {
 		if err := deps.Store.Delete(item.Vault, item.Key); err != nil {

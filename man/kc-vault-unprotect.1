@@ -1,0 +1,29 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-vault-unprotect - Allow secrets without Touch ID in a vault
+
+
+.SH SYNOPSIS
+\fBkc vault unprotect NAME [flags]\fP
+
+
+.SH DESCRIPTION
+Sets the vault's write policy. A protected vault rejects \fBkc set --no-protect\fR
+outright, so production secrets cannot lose Touch ID by accident.
+To protect secrets that already exist, use \fBkc protect --all\fR\&.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for unprotect
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--vault\fP=""
+	target vault (overrides active vault)
+
+
+.SH SEE ALSO
+\fBkc-vault(1)\fP

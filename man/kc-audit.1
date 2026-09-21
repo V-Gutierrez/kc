@@ -1,0 +1,35 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-audit - Scan vaults for weak, duplicate, stale, or suspicious secrets
+
+
+.SH SYNOPSIS
+\fBkc audit [flags]\fP
+
+
+.SH DESCRIPTION
+Scan vaults for weak, duplicate, stale, or suspicious secrets
+
+
+.SH OPTIONS
+\fB--env-file\fP=[]
+	reference .env file(s) for stale-key detection
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for audit
+
+.PP
+\fB--rotation-days\fP=0
+	flag credentials unchanged for this many days (default: config)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--vault\fP=""
+	target vault (overrides active vault)
+
+
+.SH SEE ALSO
+\fBkc(1)\fP

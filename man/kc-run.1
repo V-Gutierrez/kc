@@ -1,0 +1,31 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-run - Run a command with vault secrets injected into its environment
+
+
+.SH SYNOPSIS
+\fBkc run [--vault NAME] -- COMMAND [ARGS...] [flags]\fP
+
+
+.SH DESCRIPTION
+Run a command with vault secrets injected into its environment
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for run
+
+.PP
+\fB--no-touch-id\fP[=false]
+	skip Touch ID authentication for protected keys
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--vault\fP=""
+	target vault (overrides active vault)
+
+
+.SH SEE ALSO
+\fBkc(1)\fP

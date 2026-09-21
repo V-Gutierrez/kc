@@ -19,8 +19,10 @@ func newSetCmd(app *App) *cobra.Command {
 			}
 			key, value := args[0], args[1]
 			noProtect, _ := cmd.Flags().GetBool("no-protect")
+			noHistory, _ := cmd.Flags().GetBool("no-history")
+			keepVersions, _ := cmd.Flags().GetInt("keep-versions")
 
-			if err := app.Store.SetWithProtection(vault, key, value, !noProtect); err != nil {
+			if err := setSecret(app, vault, key, value, !noProtect, noHistory, keepVersions); err != nil {
 				return fmt.Errorf("failed to set %q in vault %q: %w", key, vault, err)
 			}
 
@@ -29,5 +31,17 @@ func newSetCmd(app *App) *cobra.Command {
 		},
 	}
 	cmd.Flags().Bool("no-protect", false, "store the secret without Touch ID protection")
+	cmd.Flags().Bool("no-history", false, "overwrite without recording the previous value")
+	cmd.Flags().Int("keep-versions", 0, "previous versions to keep for this key (default: config)")
 	return cmd
+}
+
+// setSecret writes through the option-aware store when one is wired, so
+// --no-history and --keep-versions mean something; otherwise it falls back to a
+// plain protected write.
+func setSecret(app *App, vault, key, value string, protected, skipHistory bool, retention int) error {
+	if store, ok := app.Store.(OptionStore); ok {
+		return store.SetWithOptions(vault, key, value, protected, skipHistory, retention)
+	}
+	return app.Store.SetWithProtection(vault, key, value, protected)
 }

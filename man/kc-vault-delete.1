@@ -1,0 +1,36 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-vault-delete - Delete a vault (its keys stay restorable)
+
+
+.SH SYNOPSIS
+\fBkc vault delete NAME [flags]\fP
+
+
+.SH DESCRIPTION
+Deletes a vault. Its keys are archived first — see \fBkc vault list --deleted\fR
+and \fBkc vault restore\fR — unless --purge destroys them outright.
+
+
+.SH OPTIONS
+\fB--force\fP[=false]
+	delete vault even if it contains keys
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for delete
+
+.PP
+\fB--purge\fP[=false]
+	destroy the keys instead of archiving them
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--vault\fP=""
+	target vault (overrides active vault)
+
+
+.SH SEE ALSO
+\fBkc-vault(1)\fP

@@ -1,0 +1,33 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-rollback - Restore a previously recorded value of a secret
+
+
+.SH SYNOPSIS
+\fBkc rollback KEY [flags]\fP
+
+
+.SH DESCRIPTION
+Restores a recorded version as the live value. The value being replaced is
+itself recorded first, so a rollback is never destructive and can be undone.
+Without --version the most recent recorded value is restored.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for rollback
+
+.PP
+\fB--version\fP=0
+	version to restore (default: the most recent)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--vault\fP=""
+	target vault (overrides active vault)
+
+
+.SH SEE ALSO
+\fBkc(1)\fP

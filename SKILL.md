@@ -1,9 +1,10 @@
 ---
 name: kc
 description: >
-  Manage macOS Keychain secrets via kc CLI. Store, read, list, search, and load secrets
-  with Touch ID protection. Use when: (1) Reading API keys or tokens, (2) Storing new secrets,
-  (3) Loading vault environments, (4) Searching across vaults.
+  Manage macOS Keychain secrets via kc CLI. Store, read, list, search, version, and load
+  secrets with Touch ID protection. Use when: (1) Reading API keys or tokens, (2) Storing new
+  secrets, (3) Loading vault environments, (4) Searching across vaults, (5) Recovering a
+  previous value of a secret, (6) Organising or pinning vaults per project.
 ---
 
 # kc — macOS Keychain CLI
@@ -65,6 +66,17 @@ kc run --vault prod -- <command>
 kc env
 kc env --vault prod
 
+# Recover a previous value — every kc set records the value it replaces
+kc history KEY_NAME                          # seq, timestamp, digest (never plaintext)
+kc get KEY_NAME --version 2
+kc diff KEY_NAME --version 1 --version 2
+kc rollback KEY_NAME --version 1             # itself reversible
+kc set KEY_NAME "value" --no-history         # opt out for one write
+
+# Settings (retention, rotation window)
+kc config list
+kc config set history.retention 10
+
 # Switch active vault
 kc vault switch prod
 
@@ -73,6 +85,24 @@ kc vault list
 
 # Create a new vault
 kc vault create staging
+
+# Vault lifecycle
+kc vault clone prod staging                  # no plaintext round-trip
+kc vault rename staging qa                   # keys and history move with the name
+kc vault protect prod                        # Touch ID required for every key
+kc vault info prod
+kc vault delete old                          # soft delete — restorable
+kc vault restore old
+kc vault purge old                           # destroy for good
+
+# Move or copy one secret, protection carried across
+kc mv STRIPE_KEY --to prod
+kc cp STRIPE_KEY --to staging
+
+# Pin a directory (and everything under it) to a vault
+kc vault use acme                            # writes .kc-vault
+kc vault which                               # explains the resolved vault and why
+kc vault unuse
 
 # Import from .env file
 kc import .env
@@ -99,6 +129,14 @@ eval "$(kc env --vault prod)"
 
 Prefer `kc run` for running processes. Use `eval "$(kc env)"` only for interactive shell setup (`.zshrc`).
 
+To follow a directory's pinned vault in the shell environment, install the cd hook — opt-in, because it changes what `cd` does:
+
+```bash
+eval "$(kc hook zsh)"     # bash and fish also supported
+```
+
+It is a no-op while the resolved vault is unchanged. On a change it unsets the previous vault's exports **before** reading anything, so declining the Touch ID prompt leaves the shell clean rather than holding the old vault's secrets.
+
 ## When to use
 
 | Pattern | Use case |
@@ -109,6 +147,9 @@ Prefer `kc run` for running processes. Use `eval "$(kc env)"` only for interacti
 | `kc get KEY` | Reading a secret for display/clipboard |
 | `kc set KEY` | Storing new secrets interactively |
 | `kc resolve` | Batch resolution via stdin JSON (Consi/OpenClaw protocol) |
+| `kc history` / `kc rollback` | A secret was overwritten and you need the previous value |
+| `kc vault use` | A project should always act on its own vault |
+| `kc vault clone` | Spinning up a staging copy of a vault |
 
 ## Notes
 
@@ -118,3 +159,5 @@ Prefer `kc run` for running processes. Use `eval "$(kc env)"` only for interacti
 - Consi/OpenClaw exec provider requires `passEnv: ["HOME", "PATH"]` — without `HOME`, Keychain access fails
 - Secrets never leave Apple's encryption stack
 - `kc run` requires `--` separator before the command
+- History is kept per key (last 5 by default) in `kc:{vault}:__history__` and is deleted with the vault
+- Vault precedence: `KC_VAULT` → nearest `.kc-vault` → active vault → `default`

@@ -1,0 +1,32 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-hook - Print the cd hook that reloads secrets when the directory's vault changes
+
+
+.SH SYNOPSIS
+\fBkc hook SHELL [flags]\fP
+
+
+.SH DESCRIPTION
+Prints a shell hook that runs \fBkc env --sync\fR on every directory change. When the resolved vault is unchanged the hook is a no-op; when it changes, the previous vault's exports are unset and the new vault is loaded.
+
+.PP
+zsh:  eval "$(kc hook zsh)"
+bash: eval "$(kc hook bash)"
+fish: kc hook fish | source
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for hook
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--vault\fP=""
+	target vault (overrides active vault)
+
+
+.SH SEE ALSO
+\fBkc(1)\fP

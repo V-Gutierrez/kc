@@ -64,3 +64,16 @@ func looksLikeAPIKey(value string) bool {
 	}
 	return true
 }
+
+// isRotatableName reports whether a key name marks it as a credential worth
+// rotating on a schedule. Config toggles and URLs are not.
+func isRotatableName(key string) bool {
+	lowered := strings.ToLower(strings.TrimSpace(key))
+	markers := []string{"key", "token", "secret", "password", "passwd", "credential", "cert"}
+	for _, marker := range markers {
+		if strings.Contains(lowered, marker) {
+			return true
+		}
+	}
+	return false
+}

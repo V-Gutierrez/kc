@@ -18,6 +18,74 @@ type App struct {
 	Clipboard Clipboard
 	Auth      auth.Authorizer
 	Runner    CommandRunner
+
+	// Admin, History and Config are wired by cmd/kc. Commands that need them
+	// fail with a clear message rather than a nil dereference when they are not.
+	Admin   VaultAdmin
+	History HistoryStore
+	Config  Settings
+}
+
+func (a *App) admin() (VaultAdmin, error) {
+	if a.Admin == nil {
+		return nil, fmt.Errorf("vault administration is unavailable in this build")
+	}
+	return a.Admin, nil
+}
+
+func (a *App) history() (HistoryStore, error) {
+	if a.History == nil {
+		return nil, fmt.Errorf("secret history is unavailable in this build")
+	}
+	return a.History, nil
+}
+
+func (a *App) settings() (Settings, error) {
+	if a.Config == nil {
+		return nil, fmt.Errorf("configuration is unavailable in this build")
+	}
+	return a.Config, nil
+}
+
+// activeVaultContext resolves the vault kc acts on and where that came from.
+func (a *App) activeVaultContext() (string, string) {
+	if a.Admin != nil {
+		if name, source, err := a.Admin.Context(); err == nil && name != "" {
+			return name, source
+		}
+	}
+	active, err := a.Vaults.Active()
+	if err != nil || active == "" {
+		return DefaultVault, VaultSourceDefault
+	}
+	return active, VaultSourceFile
+}
+
+func (a *App) vaultKnown(name string) bool {
+	vaults, err := a.Vaults.List()
+	if err != nil {
+		return true // cannot tell; do not cry wolf
+	}
+	for _, vault := range vaults {
+		if vault == name {
+			return true
+		}
+	}
+	return false
+}
+
+// vaultSourceLabel explains where an active vault came from.
+func vaultSourceLabel(source string) string {
+	switch source {
+	case VaultSourceEnv:
+		return "KC_VAULT"
+	case VaultSourceDir:
+		return ".kc-vault marker"
+	case VaultSourceFile:
+		return "active vault"
+	default:
+		return "default"
+	}
 }
 
 // resolveVault returns the vault from --vault flag, or falls back to active vault,
@@ -36,15 +104,11 @@ func (a *App) resolveVault(cmd *cobra.Command) (string, error) {
 		}
 		return "", fmt.Errorf("vault %q not found", v)
 	}
-	active, err := a.Vaults.Active()
-	if err != nil {
-		return DefaultVault, nil
+	name, source := a.activeVaultContext()
+	if (source == VaultSourceDir || source == VaultSourceEnv) && !a.vaultKnown(name) {
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s selects vault %q, which does not exist\n", vaultSourceLabel(source), name)
 	}
-	if active == "" {
-		return DefaultVault, nil
-	}
-
-	return active, nil
+	return name, nil
 }
 
 // NewRootCmd builds the root cobra.Command with all subcommands wired.
@@ -78,6 +142,11 @@ func NewRootCmd(app *App) *cobra.Command {
 
 	root.AddCommand(
 		newAuditCmd(app),
+		newConfigCmd(app),
+		newHistoryCmd(app),
+		newRollbackCmd(app),
+		newMoveCmd(app),
+		newCopyCmd(app),
 		newDiffCmd(app),
 		newGetCmd(app),
 		newLoadCmd(app),
@@ -86,6 +155,7 @@ func NewRootCmd(app *App) *cobra.Command {
 		newListCmd(app),
 		newSearchCmd(app),
 		newInitCmd(app),
+		newHookCmd(app),
 		newSetupCmd(app),
 		newVaultCmd(app),
 		newImportCmd(app),

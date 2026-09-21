@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -25,6 +26,8 @@ func newAuditCmd(app *App) *cobra.Command {
 				return err
 			}
 
+			rotationDays := resolveRotationDays(app, cmd)
+
 			inputs := make([]internalaudit.ScanInput, 0, len(vaultsToScan))
 			for _, vault := range vaultsToScan {
 				entries, err := app.Bulk.GetAll(vault)
@@ -36,6 +39,8 @@ func newAuditCmd(app *App) *cobra.Command {
 					Entries:       entries,
 					ReferenceKeys: referenceKeys,
 					MinLength:     16,
+					Modified:      modifiedIndex(app, vault),
+					RotationDays:  rotationDays,
 				})
 			}
 
@@ -53,7 +58,37 @@ func newAuditCmd(app *App) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringSlice("env-file", nil, "reference .env file(s) for stale-key detection")
+	cmd.Flags().Int("rotation-days", 0, "flag credentials unchanged for this many days (default: config)")
 	return cmd
+}
+
+// resolveRotationDays prefers the flag, then the config, then off.
+func resolveRotationDays(app *App, cmd *cobra.Command) int {
+	if cmd.Flags().Changed("rotation-days") {
+		days, _ := cmd.Flags().GetInt("rotation-days")
+		return days
+	}
+	if app.Config == nil {
+		return 0
+	}
+	days, err := strconv.Atoi(app.Config.Get("audit.rotation_days"))
+	if err != nil {
+		return 0
+	}
+	return days
+}
+
+// modifiedIndex maps each key to when it was last written, for the rotation rule.
+func modifiedIndex(app *App, vault string) map[string]string {
+	metadata, err := app.Store.ListMetadata(vault)
+	if err != nil {
+		return nil
+	}
+	index := make(map[string]string, len(metadata))
+	for _, item := range metadata {
+		index[item.Key] = item.Modified
+	}
+	return index
 }
 
 func resolveAuditVaults(app *App, cmd *cobra.Command) ([]string, error) {

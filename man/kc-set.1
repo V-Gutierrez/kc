@@ -17,6 +17,18 @@ Stores VALUE under KEY in the active vault (or --vault). Creates or overwrites.
 \fB-h\fP, \fB--help\fP[=false]
 	help for set
 
+.PP
+\fB--keep-versions\fP=0
+	previous versions to keep for this key (default: config)
+
+.PP
+\fB--no-history\fP[=false]
+	overwrite without recording the previous value
+
+.PP
+\fB--no-protect\fP[=false]
+	store the secret without Touch ID protection
+
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
 \fB--vault\fP=""
