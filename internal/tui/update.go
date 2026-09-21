@@ -201,35 +201,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch {
-	case msg.String() == "y":
-		m.pendingVimToken++
-		m.pendingVimKey = msg.String()
-		token := m.pendingVimToken
-		keyName := m.pendingVimKey
-		return m, tea.Tick(250*time.Millisecond, func(_ time.Time) tea.Msg {
-			return vimTimeoutMsg{token: token, key: keyName}
-		})
-	case msg.String() == "c":
-		selected, ok := m.selectedEntry()
-		if !ok {
-			return m, nil
-		}
-		m.pendingVimToken++
-		m.pendingVimKey = "c"
-		m.clearPreview()
-		return m, copyCmd(m.deps, selected)
-	case msg.String() == "d":
-		m.pendingVimToken++
-		m.pendingVimKey = "d"
-		if _, ok := m.selectedEntry(); ok {
-			m.mode = modeConfirmDelete
-		}
-		return m, nil
+	case msg.String() == "y", msg.String() == "c", msg.String() == "d":
+		// All three are the first half of a possible pair (yy / cc / dd). The
+		// single-key action belongs to the resolved keystroke, never to the
+		// first half — acting here meant `cc` pushed the secret through the
+		// clipboard, and Touch ID, on the way to the edit form.
+		return m.armPendingVim(msg.String())
 	case key.Matches(msg, m.keys.Help):
 		m.mode = modeHelp
 		return m, nil
 	case key.Matches(msg, m.keys.Command):
 		m.mode = modeCommandPalette
+		m.err = nil
 		m.commandInput.SetValue("")
 		m.commandInput.Focus()
 		return m, textinput.Blink
@@ -252,6 +235,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case key.Matches(msg, m.keys.CreateVault):
 		m.mode = modeCreateVault
+		m.err = nil
 		m.vaultNameInput.SetValue("")
 		m.vaultNameInput.Focus()
 		return m, textinput.Blink
@@ -286,6 +270,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Add):
 		m.mode = modeAdd
 		m.formError = ""
+		m.err = nil
 		m.form = newFormState(m.activeVault, "", "")
 		return m, textinput.Blink
 	case key.Matches(msg, m.keys.Edit):
@@ -295,6 +280,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.mode = modeEdit
 		m.formError = ""
+		m.err = nil
 		// Pre-fill with the live value so the form shows what is actually
 		// stored. A failed read (declined Touch ID) leaves it empty, which the
 		// submit then treats as "unchanged" rather than as an instruction to
@@ -360,9 +346,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// armPendingVim starts the window in which a second identical keystroke turns a
+// single-key action into its paired one.
+func (m Model) armPendingVim(keyName string) (tea.Model, tea.Cmd) {
+	m.pendingVimToken++
+	m.pendingVimKey = keyName
+	token := m.pendingVimToken
+	return m, tea.Tick(250*time.Millisecond, func(_ time.Time) tea.Msg {
+		return vimTimeoutMsg{token: token, key: keyName}
+	})
+}
+
 func (m Model) executeSingleVim(keyName string) (tea.Model, tea.Cmd) {
 	switch keyName {
-	case "y":
+	case "y", "c":
 		selected, ok := m.selectedEntry()
 		if !ok {
 			return m, nil
@@ -386,6 +383,7 @@ func (m Model) executeDoubleVim(keyName string) (tea.Model, tea.Cmd) {
 		}
 		m.mode = modeEdit
 		m.formError = ""
+		m.err = nil
 		// Pre-fill with the live value so the form shows what is actually
 		// stored. A failed read (declined Touch ID) leaves it empty, which the
 		// submit then treats as "unchanged" rather than as an instruction to

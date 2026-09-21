@@ -305,6 +305,14 @@ kc mv STRIPE_KEY --to prod         # move
 kc cp STRIPE_KEY --to staging      # copy
 ```
 
+### Rotation at a glance
+
+In the TUI, a credential (`*_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`) that has
+not been written inside the rotation window carries a `⟳` in the list, and the
+preview says how long it has been. It reads the modification timestamp only —
+no secret is read and no Touch ID prompt is raised — and it honours the same
+`audit.rotation_days` setting as `kc audit`.
+
 ### Per-directory vaults
 
 A `.kc-vault` marker pins a directory — and everything under it — to a vault.
@@ -319,6 +327,9 @@ kc list                            # reads the acme vault, no --vault needed
 ```
 
 Precedence is `KC_VAULT` → nearest `.kc-vault` → active vault → `default`.
+
+When a marker is what decided the vault, the TUI status bar says so —
+`acme (.kc-vault)` — so you are never guessing which vault a keystroke lands in.
 
 To also keep your **shell environment** in step with the pinned vault, install
 the cd hook. It is deliberately separate from `kc init`, because it changes what

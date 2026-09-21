@@ -79,3 +79,62 @@ func TestTUIHistoryAdapterMapsVersions(t *testing.T) {
 		t.Fatalf("mapped version = %#v", got[0])
 	}
 }
+
+type stubAdmin struct {
+	VaultAdmin
+	name   string
+	source string
+	err    error
+}
+
+func (s stubAdmin) Context() (string, string, error) { return s.name, s.source, s.err }
+
+type stubSettings struct {
+	Settings
+	values map[string]string
+}
+
+func (s stubSettings) Get(key string) string { return s.values[key] }
+
+// Only a .kc-vault marker is a pin. An active vault chosen by `kc vault switch`
+// is not one, and telling the user the directory decided it would be a claim
+// about the filesystem that is not true.
+func TestPinnedVaultOnlyReportsADirectoryMarker(t *testing.T) {
+	cases := []struct {
+		source string
+		want   string
+	}{
+		{VaultSourceDir, "acme"},
+		{VaultSourceFile, ""},
+		{VaultSourceDefault, ""},
+		{VaultSourceEnv, ""},
+	}
+	for _, tc := range cases {
+		app := &App{Admin: stubAdmin{name: "acme", source: tc.source}}
+		if got := pinnedVault(app); got != tc.want {
+			t.Fatalf("source %q → %q, want %q", tc.source, got, tc.want)
+		}
+	}
+}
+
+func TestPinnedVaultIsEmptyWithoutAnAdmin(t *testing.T) {
+	if got := pinnedVault(&App{}); got != "" {
+		t.Fatalf("pinnedVault = %q, want empty", got)
+	}
+}
+
+// The TUI badge and `kc audit` must agree, or the same key is stale in one
+// place and fine in the other.
+func TestRotationDaysComesFromTheAuditSetting(t *testing.T) {
+	app := &App{Config: stubSettings{values: map[string]string{"audit.rotation_days": "90"}}}
+	if got := configuredRotationDays(app); got != 90 {
+		t.Fatalf("rotation days = %d, want 90", got)
+	}
+	if got := configuredRotationDays(&App{}); got != 0 {
+		t.Fatalf("rotation days without config = %d, want 0", got)
+	}
+	unset := &App{Config: stubSettings{values: map[string]string{}}}
+	if got := configuredRotationDays(unset); got != 0 {
+		t.Fatalf("rotation days when unset = %d, want 0", got)
+	}
+}

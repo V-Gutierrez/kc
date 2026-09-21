@@ -1,6 +1,10 @@
 package cli
 
-import "github.com/v-gutierrez/kc/internal/tui"
+import (
+	"strconv"
+
+	"github.com/v-gutierrez/kc/internal/tui"
+)
 
 type interactiveDeps = tui.Deps
 
@@ -74,5 +78,35 @@ func launchInteractive(app *App, initialFilter string) error {
 	if app.History != nil {
 		deps.History = tuiHistoryAdapter{store: app.History}
 	}
+	deps.PinnedVault = pinnedVault(app)
+	deps.RotationDays = configuredRotationDays(app)
 	return runInteractive(deps)
+}
+
+// pinnedVault names the vault a .kc-vault marker fixes for this directory, and
+// only that: an active vault chosen by `kc vault switch` is not a pin, and
+// saying so would be a claim about the filesystem that is not true.
+func pinnedVault(app *App) string {
+	if app.Admin == nil {
+		return ""
+	}
+	name, source, err := app.Admin.Context()
+	if err != nil || source != VaultSourceDir {
+		return ""
+	}
+	return name
+
+}
+
+// configuredRotationDays reads the same setting `kc audit` uses, so a key shown
+// as stale in the TUI is a key `kc audit` would flag.
+func configuredRotationDays(app *App) int {
+	if app.Config == nil {
+		return 0
+	}
+	days, err := strconv.Atoi(app.Config.Get("audit.rotation_days"))
+	if err != nil {
+		return 0
+	}
+	return days
 }
