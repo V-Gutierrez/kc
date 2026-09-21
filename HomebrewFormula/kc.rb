@@ -5,21 +5,21 @@
 class Kc < Formula
   desc "Human-friendly macOS Keychain CLI"
   homepage "https://github.com/v-gutierrez/kc"
-  version "1.3.0"
+  version "1.4.0"
   license "MIT"
   depends_on :macos
 
   if Hardware::CPU.intel?
-    url "https://github.com/v-gutierrez/kc/releases/download/v1.3.0/kc-darwin-amd64.tar.gz"
-    sha256 "19e78324ba45790688a7004d67521ccc4a6e714f726a6c43ed8386779bceb6bb"
+    url "https://github.com/v-gutierrez/kc/releases/download/v1.4.0/kc-darwin-amd64.tar.gz"
+    sha256 "bcc0cbd327051904a9afda025df33c772ec8aad5440993c74984555ecc736266"
 
     define_method(:install) do
       bin.install "kc"
     end
   end
   if Hardware::CPU.arm?
-    url "https://github.com/v-gutierrez/kc/releases/download/v1.3.0/kc-darwin-arm64.tar.gz"
-    sha256 "225da52f2f576c868d6d77f259bb8250ac3f0200651d3a7d6b9420c9a106f881"
+    url "https://github.com/v-gutierrez/kc/releases/download/v1.4.0/kc-darwin-arm64.tar.gz"
+    sha256 "935e4c6dd943d58be50f51da0ab7a36287690335a6189d331ad357084ee44fab"
 
     define_method(:install) do
       bin.install "kc"
