@@ -2,3 +2,6 @@ kc
 dist/
 SPEC.md
 SPEC-v0.3.0.md
+.kc/
+.codegraph/
+consi-migration-patch.py

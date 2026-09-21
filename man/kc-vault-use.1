@@ -1,0 +1,32 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-vault-use - Pin this directory to a vault
+
+
+.SH SYNOPSIS
+\fBkc vault use NAME [flags]\fP
+
+
+.SH DESCRIPTION
+Writes a .kc-vault marker so kc uses NAME for every command run in this
+directory and below — no shell hook, resolved by kc on each invocation.
+
+
+.SH OPTIONS
+\fB--dir\fP=""
+	directory to pin (default: working directory)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for use
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--vault\fP=""
+	target vault (overrides active vault)
+
+
+.SH SEE ALSO
+\fBkc-vault(1)\fP

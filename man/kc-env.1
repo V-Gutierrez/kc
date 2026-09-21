@@ -17,6 +17,14 @@ Print shell export statements for all secrets in the active vault
 \fB-h\fP, \fB--help\fP[=false]
 	help for env
 
+.PP
+\fB--no-touch-id\fP[=false]
+	skip Touch ID authentication for protected keys
+
+.PP
+\fB--sync\fP[=false]
+	emit the difference against the vault already loaded (used by kc hook)
+
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
 \fB--vault\fP=""

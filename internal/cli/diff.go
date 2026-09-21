@@ -7,12 +7,13 @@ import (
 
 	"github.com/spf13/cobra"
 	internaldiff "github.com/v-gutierrez/kc/internal/diff"
+	"github.com/v-gutierrez/kc/internal/keychain"
 )
 
 func newDiffCmd(app *App) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "diff [ENV_FILE]",
-		Short: "Compare an environment file or vault against another vault",
+		Use:   "diff [ENV_FILE | KEY --version N]",
+		Short: "Compare env files, vaults, or two recorded versions of one secret",
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 1 {
 				return fmt.Errorf("diff: accepts at most one .env file argument")
@@ -21,6 +22,13 @@ func newDiffCmd(app *App) *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			vaults, _ := cmd.Flags().GetStringArray("vault")
+
+			if versions, _ := cmd.Flags().GetIntSlice("version"); len(versions) > 0 {
+				if len(args) != 1 {
+					return fmt.Errorf("diff: --version needs a key, e.g. `kc diff API_KEY --version 2`")
+				}
+				return runVersionDiff(app, cmd, args[0], versions)
+			}
 
 			var leftName string
 			var leftEntries map[string]string
@@ -83,7 +91,62 @@ func newDiffCmd(app *App) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringArray("vault", nil, "vault(s) to compare; repeat twice for vault-to-vault diff")
+	cmd.Flags().IntSlice("version", nil, "recorded version(s) of a key to compare; one compares against the live value")
 	return cmd
+}
+
+// runVersionDiff compares two points in a single secret's life. It prints
+// digests rather than values — whether something changed is the question, and
+// the answer does not require showing the secret.
+func runVersionDiff(app *App, cmd *cobra.Command, key string, versions []int) error {
+	if len(versions) > 2 {
+		return fmt.Errorf("diff: pass at most two --version flags")
+	}
+	store, err := app.history()
+	if err != nil {
+		return err
+	}
+	vault, err := app.resolveVault(cmd)
+	if err != nil {
+		return err
+	}
+
+	leftLabel, leftValue, err := versionValue(app, store, vault, key, versions[0])
+	if err != nil {
+		return err
+	}
+
+	rightLabel, rightValue := "live", ""
+	if len(versions) == 2 {
+		rightLabel, rightValue, err = versionValue(app, store, vault, key, versions[1])
+	} else {
+		rightValue, err = app.Store.Get(vault, key)
+		if err != nil {
+			return fmt.Errorf("diff: read live %q in vault %q: %w", key, vault, err)
+		}
+	}
+	if err != nil {
+		return err
+	}
+
+	status := "="
+	if leftValue != rightValue {
+		status = "~"
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "%s %s  %s (%s) -> %s (%s)\n",
+		status, key, leftLabel, shortDigest(keychain.Digest(leftValue)), rightLabel, shortDigest(keychain.Digest(rightValue)))
+	if status == "=" {
+		fmt.Fprintf(cmd.OutOrStdout(), "No difference between %s and %s.\n", leftLabel, rightLabel)
+	}
+	return nil
+}
+
+func versionValue(app *App, store HistoryStore, vault, key string, version int) (string, string, error) {
+	value, err := store.Value(vault, key, version)
+	if err != nil {
+		return "", "", err
+	}
+	return fmt.Sprintf("v%d", version), value, nil
 }
 
 func resolveDiffTargetVault(app *App, vaults []string) (string, error) {

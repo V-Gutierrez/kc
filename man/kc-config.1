@@ -1,0 +1,27 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-config - Read and write kc settings
+
+
+.SH SYNOPSIS
+\fBkc config [flags]\fP
+
+
+.SH DESCRIPTION
+kc settings live in ~/.kc/config. Unknown keys are rejected so a typo fails loudly.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for config
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--vault\fP=""
+	target vault (overrides active vault)
+
+
+.SH SEE ALSO
+\fBkc(1)\fP, \fBkc-config-get(1)\fP, \fBkc-config-list(1)\fP, \fBkc-config-path(1)\fP, \fBkc-config-set(1)\fP, \fBkc-config-unset(1)\fP

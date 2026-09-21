@@ -123,9 +123,30 @@ kc diff prod staging
 | `kc init <shell>` | Print the shell init snippet for zsh, bash, or fish |
 | `kc setup` | Migrate plaintext shell secrets into Keychain and install shell init |
 | `kc migrate --from <service>` | Migrate existing Keychain entries to kc format |
+| `kc hook <shell>` | Print the cd hook that follows a directory's pinned vault |
+| `kc config list` | Show kc settings and where each value comes from |
+| `kc config set <key> <value>` | Change a setting (e.g. `history.retention`) |
+| `kc history <key>` | List recorded previous values (digests, never plaintext) |
+| `kc get <key> --version N` | Read a specific recorded version |
+| `kc diff <key> --version N --version M` | Compare two recorded versions of one key |
+| `kc rollback <key> --version N` | Restore a previous value (itself reversible) |
+| `kc set <key> <value> --no-history` | Overwrite without recording the previous value |
+| `kc mv <key> --to <vault>` | Move a secret, protection carried across |
+| `kc cp <key> --to <vault>` | Copy a secret to another vault or name |
 | `kc vault list` | List all vaults |
 | `kc vault create <name>` | Create a new vault |
 | `kc vault switch <name>` | Set active vault |
+| `kc vault clone <src> <dst>` | Copy every secret of a vault into a new one |
+| `kc vault rename <old> <new>` | Rename a vault, keys and history included |
+| `kc vault protect <name>` | Require Touch ID for every secret in a vault |
+| `kc vault describe <name>` | Set a vault's description or tags |
+| `kc vault info <name>` | Show a vault's metadata |
+| `kc vault use <name>` | Pin the current directory to a vault |
+| `kc vault unuse` | Remove this directory's vault pin |
+| `kc vault which` | Explain which vault kc will use here, and why |
+| `kc vault delete <name>` | Delete a vault — keys stay restorable |
+| `kc vault restore <name>` | Restore a soft-deleted vault |
+| `kc vault purge <name>` | Destroy a soft-deleted vault for good |
 | `kc resolve` | Resolve batch secret IDs via stdin JSON (Consi/OpenClaw protocol) |
 | `kc resolve --no-touch-id` | Resolve without Touch ID (for non-interactive gateways) |
 
@@ -262,6 +283,86 @@ kc search api
 kc search openai --json
 ```
 
+### Vault lifecycle
+
+```bash
+kc vault clone prod staging        # spin up a copy without a plaintext round-trip
+kc vault rename staging qa         # keys and their history move with the name
+kc vault protect prod              # every secret in prod now requires Touch ID
+kc vault describe prod --tag env=production --description "Live credentials"
+kc vault info prod
+
+kc vault delete old-project        # soft delete — the keys are archived, not destroyed
+kc vault restore old-project       # available until the retention window closes
+kc vault purge old-project         # destroy it for good
+```
+
+Moving a single secret keeps its protection level, which a manual
+`get` + `set` + `del` does not:
+
+```bash
+kc mv STRIPE_KEY --to prod         # move
+kc cp STRIPE_KEY --to staging      # copy
+```
+
+### Per-directory vaults
+
+A `.kc-vault` marker pins a directory — and everything under it — to a vault.
+Resolution happens inside kc on every invocation, so there is nothing to keep in
+sync and no hook required for kc's own commands:
+
+```bash
+cd ~/work/acme
+kc vault use acme                  # writes .kc-vault
+kc vault which                     # acme  (.kc-vault in ~/work/acme)
+kc list                            # reads the acme vault, no --vault needed
+```
+
+Precedence is `KC_VAULT` → nearest `.kc-vault` → active vault → `default`.
+
+To also keep your **shell environment** in step with the pinned vault, install
+the cd hook. It is deliberately separate from `kc init`, because it changes what
+`cd` does:
+
+```bash
+eval "$(kc hook zsh)"              # zsh
+eval "$(kc hook bash)"             # bash
+kc hook fish | source              # fish
+```
+
+On a directory change the hook runs `kc env --sync`. When the resolved vault is
+unchanged it prints nothing and touches nothing — no Keychain read, no Touch ID
+prompt per prompt. When the vault does change, the previous vault's exports are
+unset *before* anything else, so declining the Touch ID prompt leaves the shell
+clean rather than holding secrets the new directory is not entitled to.
+
+## Secret versioning
+
+`kc set` records the value it replaces, so an overwrite is no longer final:
+
+```bash
+kc set API_KEY "rotated"
+kc history API_KEY                 # seq, timestamp, protection, digest — never the value
+kc get API_KEY --version 2         # read one recorded version
+kc diff API_KEY --version 1 --version 2
+kc rollback API_KEY --version 1    # restore it
+```
+
+Rollback is itself a `set`: the value it replaces is recorded too, so restoring
+a version is reversible. History lives in its own Keychain service
+(`kc:{vault}:__history__`) and is deleted with the vault.
+
+Retention defaults to the last 5 versions per key:
+
+```bash
+kc config set history.retention 10
+kc set HIGH_CHURN "$v" --no-history        # opt out for one write
+kc set API_KEY "$v" --keep-versions 20     # override for one write
+```
+
+`kc audit` flags credentials that have not been rotated inside the configured
+window.
+
 ## Secure Secret Injection
 
 ### kc run — process-scoped secrets (recommended)
@@ -360,6 +461,15 @@ macOS Keychain (AES-256 via Secure Enclave)
         └── Account = key_name
               └── Password = secret_value
               └── Access Control = Touch ID (default) | None (--no-protect)
+  └── Service = "kc:{vault_name}:__history__"
+        └── Account = "{key_name}~{seq}"        previous values, newest seq last
+  └── Service = "kc:__archive__:{vault_name}"
+        └── Account = key_name                   soft-deleted vaults
+
+~/.kc/vaults          vault list with description, tags and creation date
+~/.kc/active_vault    active vault (0600)
+~/.kc/config          settings, e.g. history.retention
+<dir>/.kc-vault       pins a directory tree to a vault
 ```
 
 ## License

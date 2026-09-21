@@ -1,0 +1,45 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-mv - Move a secret to another vault or name
+
+
+.SH SYNOPSIS
+\fBkc mv KEY [flags]\fP
+
+
+.SH DESCRIPTION
+Transfers one secret between vaults, or renames it in place with --as.
+The secret's Touch ID protection travels with it; on a move so does its
+recorded history. An existing destination key is never overwritten silently.
+
+
+.SH OPTIONS
+\fB--as\fP=""
+	store under a different key name
+
+.PP
+\fB--force\fP[=false]
+	overwrite the destination key if it exists
+
+.PP
+\fB--from\fP=""
+	source vault (default: active vault)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for mv
+
+.PP
+\fB--to\fP=""
+	destination vault (default: same as source)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--vault\fP=""
+	target vault (overrides active vault)
+
+
+.SH SEE ALSO
+\fBkc(1)\fP

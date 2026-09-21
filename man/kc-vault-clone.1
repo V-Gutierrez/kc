@@ -1,0 +1,28 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-vault-clone - Copy every secret of a vault into a new one
+
+
+.SH SYNOPSIS
+\fBkc vault clone SOURCE DEST [flags]\fP
+
+
+.SH DESCRIPTION
+Creates DEST with a copy of every secret in SOURCE, protection levels included.
+History is not copied: the clone starts fresh.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for clone
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--vault\fP=""
+	target vault (overrides active vault)
+
+
+.SH SEE ALSO
+\fBkc-vault(1)\fP

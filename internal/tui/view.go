@@ -256,11 +256,25 @@ func (m Model) overlayView() string {
 		if !m.form.isProtected {
 			prot = "🔓 unprotected"
 		}
-		return m.styles.overlay.Render(
-			m.styles.header.Render("Confirm Save") + "\n\n" +
-				fmt.Sprintf("Save %s to vault:%s (%s)?", key, vault, prot) + "\n\n" +
-				m.styles.help.Render("[Enter] confirm / [Esc] cancel"),
-		)
+
+		title := "Confirm Save"
+		action := fmt.Sprintf("Save %s to vault:%s (%s)?", key, vault, prot)
+		if origin := m.form.origin; origin != nil && (origin.Vault != vault || origin.Key != key) {
+			title = "Confirm Move"
+			action = fmt.Sprintf("Move %s:%s → %s:%s (%s)?", origin.Vault, origin.Key, vault, key, prot)
+		}
+
+		lines := []string{m.styles.header.Render(title), "", action}
+		if m.form.origin != nil {
+			if m.form.value.Value() == "" && !m.form.valueSeeded {
+				lines = append(lines, "", m.styles.subtle.Render("Value unchanged — the stored secret is carried over."))
+			} else {
+				lines = append(lines, "", m.styles.warning.Render("⚠ The stored value will be replaced."))
+			}
+		}
+		lines = append(lines, "", m.styles.help.Render("[Enter] confirm / [Esc] cancel"))
+
+		return m.styles.overlay.Render(strings.Join(lines, "\n"))
 	}
 
 	title := "Add key"
@@ -297,8 +311,19 @@ func (m Model) overlayView() string {
 		protStyle = m.styles.selected
 	}
 
+	valueFieldHint := " (F2 to reveal)"
+	if m.mode == modeEdit && !m.form.valueSeeded {
+		valueFieldHint = " (F2 to reveal · empty keeps current value)"
+	}
+
+	formError := ""
+	if m.formError != "" {
+		formError = m.styles.warning.Render("⚠ " + m.formError)
+	}
+
 	content := []string{
 		m.styles.header.Render(title),
+		formError,
 		"",
 		m.formLabel("Vault", 0),
 		m.form.vault.View(),
@@ -310,7 +335,7 @@ func (m Model) overlayView() string {
 		keyNamingHint,
 		keyWarning,
 		"",
-		m.formLabel("Value", 2) + m.styles.subtle.Render(" (F2 to reveal)"),
+		m.formLabel("Value", 2) + m.styles.subtle.Render(valueFieldHint),
 		m.form.value.View(),
 		"",
 		protStyle.Render(protChecked+"Touch ID protected") + m.styles.subtle.Render(" (Space toggle)"),

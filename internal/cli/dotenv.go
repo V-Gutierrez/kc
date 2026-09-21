@@ -11,7 +11,6 @@ func parseEnvReader(r io.Reader) map[string]string {
 	return envutil.ParseEnvReader(r)
 }
 
-
 func unquoteValue(s string) string {
 	if len(s) >= 2 {
 		if s[0] == '\'' && s[len(s)-1] == '\'' {
@@ -30,7 +29,6 @@ func unquoteValue(s string) string {
 func shellQuote(s string) string {
 	return envutil.ShellQuote(s)
 }
-
 
 func dotenvQuote(s string) string {
 	return envutil.DotenvQuote(s)

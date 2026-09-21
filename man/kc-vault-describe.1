@@ -1,0 +1,35 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-vault-describe - Set a vault's description or tags
+
+
+.SH SYNOPSIS
+\fBkc vault describe NAME [flags]\fP
+
+
+.SH DESCRIPTION
+Set a vault's description or tags
+
+
+.SH OPTIONS
+\fB--description\fP=""
+	human-readable purpose of the vault
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for describe
+
+.PP
+\fB--tag\fP=[]
+	replace the vault's tags (repeatable)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--vault\fP=""
+	target vault (overrides active vault)
+
+
+.SH SEE ALSO
+\fBkc-vault(1)\fP

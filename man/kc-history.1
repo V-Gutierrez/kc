@@ -1,0 +1,33 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-history - List the recorded previous values of a secret
+
+
+.SH SYNOPSIS
+\fBkc history KEY [flags]\fP
+
+
+.SH DESCRIPTION
+Lists every version kc recorded before a value was overwritten or deleted.
+Values are shown as digests only — read one with \fBkc get KEY --version N\fR,
+restore one with \fBkc rollback KEY --version N\fR\&.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for history
+
+.PP
+\fB--json\fP[=false]
+	output structured JSON
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--vault\fP=""
+	target vault (overrides active vault)
+
+
+.SH SEE ALSO
+\fBkc(1)\fP

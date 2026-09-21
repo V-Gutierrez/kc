@@ -26,6 +26,10 @@ func newGetCmd(app *App) *cobra.Command {
 				return err
 			}
 			key := args[0]
+			if version, _ := cmd.Flags().GetInt("version"); version > 0 {
+				return runGetVersion(app, cmd, vault, key, version)
+			}
+
 			if !shouldSkipAuth(cmd) {
 				metadata, err := app.Store.ListMetadata(vault)
 				if err != nil {
@@ -64,7 +68,58 @@ func newGetCmd(app *App) *cobra.Command {
 	}
 	cmd.Flags().Bool("json", false, "output structured JSON")
 	cmd.Flags().Bool("no-touch-id", false, "skip Touch ID authentication for protected keys")
+	cmd.Flags().Int("version", 0, "read a recorded previous value instead of the live one")
 	return cmd
+}
+
+// runGetVersion reads one recorded version. It is gated by the same Touch ID
+// check as the live value: a previous secret is still a secret.
+func runGetVersion(app *App, cmd *cobra.Command, vault, key string, version int) error {
+	store, err := app.history()
+	if err != nil {
+		return err
+	}
+
+	versions, err := store.Versions(vault, key)
+	if err != nil {
+		return fmt.Errorf("failed to read history of %q in vault %q: %w", key, vault, err)
+	}
+	found := false
+	for _, candidate := range versions {
+		if candidate.Seq != version {
+			continue
+		}
+		found = true
+		if candidate.Protected {
+			session := authSession(app)
+			if err := session.Authorize("Unlock kc secret"); err != nil {
+				return err
+			}
+		}
+		break
+	}
+	if !found {
+		return fmt.Errorf("no version %d of %q in vault %q (see `kc history %s`)", version, key, vault, key)
+	}
+
+	value, err := store.Value(vault, key, version)
+	if err != nil {
+		return err
+	}
+
+	if jsonOutput, _ := cmd.Flags().GetBool("json"); jsonOutput {
+		return output.WriteJSON(cmd.OutOrStdout(), output.GetVersionResult(key, value, vault, version))
+	}
+
+	if app.Clipboard != nil {
+		if copyErr := app.Clipboard.Copy(value); copyErr != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: clipboard copy failed: %v\n", copyErr)
+		} else {
+			fmt.Fprintf(cmd.ErrOrStderr(), "Copied version %d to clipboard.\n", version)
+		}
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), maskValue(value))
+	return nil
 }
 
 func maskValue(value string) string {

@@ -58,11 +58,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case savedMsg:
+		if msg.removed != nil {
+			m.removeEntry(*msg.removed)
+		}
 		m.upsertEntry(msg.entry)
 		m.clearPreview()
 		m.mode = modeBrowse
+		m.formError = ""
 		m.flashToken++
-		m.flashMessage = fmt.Sprintf("✓ Saved %s to vault:%s", msg.entry.Key, msg.entry.Vault)
+		if msg.removed != nil {
+			m.flashMessage = fmt.Sprintf("✓ Moved %s:%s → %s:%s", msg.removed.Vault, msg.removed.Key, msg.entry.Vault, msg.entry.Key)
+		} else {
+			m.flashMessage = fmt.Sprintf("✓ Saved %s to vault:%s", msg.entry.Key, msg.entry.Vault)
+		}
 		m.applyFilters()
 		return m, tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
 			return clearFlashMsg{token: m.flashToken}
@@ -244,6 +252,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case key.Matches(msg, m.keys.Add):
 		m.mode = modeAdd
+		m.formError = ""
 		m.form = newFormState(m.activeVault, "", "")
 		return m, textinput.Blink
 	case key.Matches(msg, m.keys.Edit):
@@ -252,14 +261,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.mode = modeEdit
+		m.formError = ""
+		// Pre-fill with the live value so the form shows what is actually
+		// stored. A failed read (declined Touch ID) leaves it empty, which the
+		// submit then treats as "unchanged" rather than as an instruction to
+		// blank the secret.
 		value, err := m.deps.Store.Get(selected.Vault, selected.Key)
 		if err != nil {
 			if m.preview.revealed && m.preview.vault == selected.Vault && m.preview.key == selected.Key {
 				value = m.preview.value
 			}
 		}
-		m.form = newFormState(selected.Vault, selected.Key, value)
-		m.form.isProtected = selected.Protection != protectionUnprotected
+		m.form = newEditFormState(selected, value)
 		return m, textinput.Blink
 	case key.Matches(msg, m.keys.Delete):
 		if _, ok := m.selectedEntry(); ok {
@@ -330,14 +343,18 @@ func (m Model) executeDoubleVim(keyName string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.mode = modeEdit
+		m.formError = ""
+		// Pre-fill with the live value so the form shows what is actually
+		// stored. A failed read (declined Touch ID) leaves it empty, which the
+		// submit then treats as "unchanged" rather than as an instruction to
+		// blank the secret.
 		value, err := m.deps.Store.Get(selected.Vault, selected.Key)
 		if err != nil {
 			if m.preview.revealed && m.preview.vault == selected.Vault && m.preview.key == selected.Key {
 				value = m.preview.value
 			}
 		}
-		m.form = newFormState(selected.Vault, selected.Key, value)
-		m.form.isProtected = selected.Protection != protectionUnprotected
+		m.form = newEditFormState(selected, value)
 		return m, textinput.Blink
 	case "d":
 		if _, ok := m.selectedEntry(); ok {
@@ -383,10 +400,12 @@ func (m Model) handleFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	if key.Matches(msg, m.keys.Cancel) {
 		m.mode = modeBrowse
+		m.formError = ""
 		m.clearPreview()
 		return m, nil
 	}
 	if key.Matches(msg, m.keys.Confirm) {
+		m.formError = ""
 		m.form.confirming = true
 		return m, nil
 	}
@@ -572,10 +591,43 @@ func (m Model) submitForm() (Model, tea.Cmd) {
 	if vault == "" {
 		vault = m.activeVault
 	}
+	if keyName == "" {
+		m.form.confirming = false
+		m.formError = "key name cannot be empty"
+		return m, nil
+	}
 	protection := protectionUnprotected
 	if m.form.isProtected {
 		protection = protectionProtected
 	}
-	entry := entry{Vault: vault, Key: keyName, Protection: protection}
-	return m, saveCmd(m.deps, entry, value)
+	target := entry{Vault: vault, Key: keyName, Protection: protection}
+	origin := m.form.origin
+
+	// Adding a key: nothing to preserve, nothing to move.
+	if origin == nil {
+		m.formError = ""
+		return m, saveCmd(m.deps, target, value)
+	}
+
+	// Editing: an untouched value field means "leave the secret as it is".
+	// The form opens blank whenever the value was never revealed, so treating
+	// blank as an instruction would silently destroy the secret on a plain
+	// Enter. The current value is read back at write time instead.
+	keepValue := value == "" && !m.form.valueSeeded
+	if keepValue && sameEntry(*origin, target) && origin.Protection == target.Protection {
+		// Nothing changed at all — do not touch the Keychain (and do not burn
+		// a history slot) just to rewrite identical bytes.
+		m.mode = modeBrowse
+		m.form.confirming = false
+		m.formError = ""
+		m.flashToken++
+		m.flashMessage = fmt.Sprintf("No changes to %s", origin.Key)
+		token := m.flashToken
+		return m, tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
+			return clearFlashMsg{token: token}
+		})
+	}
+
+	m.formError = ""
+	return m, saveEntryCmd(m.deps, target, value, origin, keepValue)
 }

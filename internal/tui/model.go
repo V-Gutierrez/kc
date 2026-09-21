@@ -117,6 +117,14 @@ type formState struct {
 	focus       int
 	isProtected bool
 	confirming  bool
+	// origin is the entry being edited, nil in add mode. It is what makes a
+	// rename a move instead of a copy, and what the value is restored from
+	// when the user leaves the value field untouched.
+	origin *entry
+	// valueSeeded records that the form opened with the real current value
+	// (only possible when it was revealed first). When it is false, an empty
+	// value field means "unchanged", never "blank the secret".
+	valueSeeded bool
 }
 
 type loadedMsg struct {
@@ -143,6 +151,8 @@ type clearFlashMsg struct {
 type savedMsg struct {
 	entry entry
 	value string
+	// removed is set when the save was a move: the origin row no longer exists.
+	removed *entry
 }
 
 type deletedMsg struct {
@@ -193,6 +203,7 @@ type Model struct {
 	mode             mode
 	preview          previewState
 	form             formState
+	formError        string
 	loading          bool
 	status           string
 	flashMessage     string
@@ -453,7 +464,7 @@ func (m *Model) clearPreview() {
 
 func (m *Model) upsertEntry(item entry) {
 	for i, existing := range m.entries {
-		if existing.Vault == item.Vault && existing.Key == item.Key {
+		if sameEntry(existing, item) {
 			m.entries[i] = item
 			return
 		}
@@ -470,11 +481,17 @@ func (m *Model) upsertEntry(item entry) {
 func (m *Model) removeEntry(item entry) {
 	filtered := m.entries[:0]
 	for _, existing := range m.entries {
-		if existing != item {
+		if !sameEntry(existing, item) {
 			filtered = append(filtered, existing)
 		}
 	}
 	m.entries = filtered
+}
+
+// sameEntry identifies a secret by where it lives, not by the mutable
+// attributes around it: a protection toggle edits a row, it does not create one.
+func sameEntry(a, b entry) bool {
+	return a.Vault == b.Vault && a.Key == b.Key
 }
 
 func (m Model) selectedEntry() (entry, bool) {
@@ -496,6 +513,19 @@ func (m *Model) focusForm() {
 	case 2:
 		m.form.value.Focus()
 	}
+}
+
+// newEditFormState builds the form for an existing secret. It remembers where
+// the secret came from so the submit can tell an in-place edit from a move, and
+// whether the value field was seeded with the real value or left blank because
+// the secret was never revealed.
+func newEditFormState(origin entry, value string) formState {
+	form := newFormState(origin.Vault, origin.Key, value)
+	source := origin
+	form.origin = &source
+	form.valueSeeded = value != ""
+	form.isProtected = origin.Protection != protectionUnprotected
+	return form
 }
 
 func newFormState(vault, keyName, value string) formState {

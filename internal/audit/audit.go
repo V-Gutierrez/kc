@@ -1,8 +1,10 @@
 package audit
 
 import (
+	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/v-gutierrez/kc/internal/keychain"
 )
@@ -28,6 +30,12 @@ type ScanInput struct {
 	Entries       map[string]string
 	ReferenceKeys map[string]struct{}
 	MinLength     int
+	// Modified maps a key to the timestamp of its last write
+	// ("2006-01-02 15:04", as Keychain reports it).
+	Modified map[string]string
+	// RotationDays flags sensitive secrets older than this many days.
+	// Zero disables the rule.
+	RotationDays int
 }
 
 func Scan(inputs []ScanInput) []Finding {
@@ -36,6 +44,7 @@ func Scan(inputs []ScanInput) []Finding {
 		findings = append(findings, weakSecretFindings(input)...)
 		findings = append(findings, suspiciousNameFindings(input)...)
 		findings = append(findings, staleKeyFindings(input)...)
+		findings = append(findings, rotationFindings(input)...)
 	}
 
 	sort.Slice(findings, func(i, j int) bool {
@@ -160,6 +169,37 @@ func staleKeyFindings(input ScanInput) []Finding {
 			Key:      key,
 			Rule:     "stale",
 			Detail:   "key not present in reference environment",
+		})
+	}
+	return findings
+}
+
+// rotationFindings flags secrets whose name marks them as credentials and
+// whose last write is older than the configured rotation window. A secret that
+// never changes is a secret whose blast radius only grows.
+func rotationFindings(input ScanInput) []Finding {
+	if input.RotationDays <= 0 || len(input.Modified) == 0 {
+		return nil
+	}
+
+	cutoff := time.Now().AddDate(0, 0, -input.RotationDays)
+	keys := sortedKeys(input.Entries)
+	findings := make([]Finding, 0)
+	for _, key := range keys {
+		if !isRotatableName(key) {
+			continue
+		}
+		modified, err := time.Parse("2006-01-02 15:04", strings.TrimSpace(input.Modified[key]))
+		if err != nil || !modified.Before(cutoff) {
+			continue
+		}
+		days := int(time.Since(modified).Hours() / 24)
+		findings = append(findings, Finding{
+			Severity: SeverityMedium,
+			Vault:    input.Vault,
+			Key:      key,
+			Rule:     "stale-rotation",
+			Detail:   fmt.Sprintf("unchanged for %d days (rotation window is %d)", days, input.RotationDays),
 		})
 	}
 	return findings

@@ -1,0 +1,32 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-vault-purge - Destroy a soft-deleted vault for good
+
+
+.SH SYNOPSIS
+\fBkc vault purge [NAME] [flags]\fP
+
+
+.SH DESCRIPTION
+Removes an archived vault permanently, history included. With --expired it
+purges every archived vault past the retention window instead.
+
+
+.SH OPTIONS
+\fB--expired\fP[=false]
+	purge every archived vault past the retention window
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for purge
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--vault\fP=""
+	target vault (overrides active vault)
+
+
+.SH SEE ALSO
+\fBkc-vault(1)\fP

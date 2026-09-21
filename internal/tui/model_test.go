@@ -15,6 +15,7 @@ type mockStore struct {
 	values   map[string]map[string]string
 	metadata map[string]map[string]string
 	listErr  error
+	getErr   error
 	getCalls []storeCall
 	setCalls []setCall
 	delCalls []storeCall
@@ -42,6 +43,9 @@ func newMockStore() *mockStore {
 
 func (m *mockStore) Get(vault, key string) (string, error) {
 	m.getCalls = append(m.getCalls, storeCall{vault: vault, key: key})
+	if m.getErr != nil {
+		return "", m.getErr
+	}
 	return m.values[vault][key], nil
 }
 

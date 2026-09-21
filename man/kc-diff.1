@@ -1,0 +1,30 @@
+.nh
+.TH "KC" "1" "Jan 0001" "kc dev" "kc Manual"
+
+.SH NAME
+kc-diff - Compare env files, vaults, or two recorded versions of one secret
+
+
+.SH SYNOPSIS
+\fBkc diff [ENV_FILE | KEY --version N] [flags]\fP
+
+
+.SH DESCRIPTION
+Compare env files, vaults, or two recorded versions of one secret
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for diff
+
+.PP
+\fB--vault\fP=[]
+	vault(s) to compare; repeat twice for vault-to-vault diff
+
+.PP
+\fB--version\fP=[]
+	recorded version(s) of a key to compare; one compares against the live value
+
+
+.SH SEE ALSO
+\fBkc(1)\fP
