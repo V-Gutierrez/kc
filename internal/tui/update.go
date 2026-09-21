@@ -82,6 +82,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = fmt.Sprintf("Deleted %s from %s", msg.entry.Key, msg.entry.Vault)
 		m.applyFilters()
 		return m, nil
+	case historyLoadedMsg:
+		m.history.loading = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		// A successful read clears whatever failed before it, or a stale error
+		// would keep hiding a perfectly good list.
+		m.err = nil
+		m.history.vault = msg.vault
+		m.history.key = msg.key
+		m.history.versions = msg.versions
+		m.history.cursor = 0
+		return m, nil
+	case historyValueMsg:
+		m.flashToken++
+		m.flashMessage = fmt.Sprintf("✓ Copied version %d to clipboard, auto-clears in 30s", msg.seq)
+		token := m.flashToken
+		return m, tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
+			return clearFlashMsg{token: token}
+		})
+	case rolledBackMsg:
+		m.mode = modeBrowse
+		m.history = historyState{}
+		m.clearPreview()
+		m.flashToken++
+		m.flashMessage = fmt.Sprintf("✓ Restored %s from version %d", msg.key, msg.seq)
+		token := m.flashToken
+		return m, tea.Batch(loadEntriesCmd(m.deps), tea.Tick(2*time.Second, func(_ time.Time) tea.Msg {
+			return clearFlashMsg{token: token}
+		}))
 	case vaultCreatedMsg:
 		m.vaults = append(m.vaults, msg.name)
 		m.currentFilter = msg.name
@@ -146,6 +177,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleVaultPickerKey(msg)
 	case modeCommandPalette:
 		return m.handleCommandPaletteKey(msg)
+	case modeHistory:
+		return m.handleHistoryKey(msg)
 	}
 
 	if m.pendingVimKey != "" {
@@ -274,6 +307,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.form = newEditFormState(selected, value)
 		return m, textinput.Blink
+	case key.Matches(msg, m.keys.History):
+		selected, ok := m.selectedEntry()
+		if !ok || m.deps.History == nil {
+			return m, nil
+		}
+		m.mode = modeHistory
+		m.clearPreview()
+		m.history = historyState{vault: selected.Vault, key: selected.Key, loading: true}
+		return m, loadHistoryCmd(m.deps, selected)
 	case key.Matches(msg, m.keys.Delete):
 		if _, ok := m.selectedEntry(); ok {
 			m.mode = modeConfirmDelete
@@ -630,4 +672,60 @@ func (m Model) submitForm() (Model, tea.Cmd) {
 
 	m.formError = ""
 	return m, saveEntryCmd(m.deps, target, value, origin, keepValue)
+}
+
+func (m Model) handleHistoryKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.history.confirming {
+		if key.Matches(msg, m.keys.Confirm) {
+			version, ok := m.history.selected()
+			if !ok {
+				m.history.confirming = false
+				return m, nil
+			}
+			m.history.confirming = false
+			return m, rollbackCmd(m.deps, m.history.vault, m.history.key, version.Seq)
+		}
+		// Anything that is not a confirmation cancels: a restore overwrites the
+		// live secret, so an ambiguous keystroke must never be taken as a yes.
+		m.history.confirming = false
+		return m, nil
+	}
+
+	switch {
+	case key.Matches(msg, m.keys.Cancel):
+		m.mode = modeBrowse
+		m.history = historyState{}
+		return m, nil
+	case key.Matches(msg, m.keys.Up):
+		if m.history.cursor > 0 {
+			m.history.cursor--
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Down):
+		if m.history.cursor < len(m.history.versions)-1 {
+			m.history.cursor++
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Top):
+		m.history.cursor = 0
+		return m, nil
+	case key.Matches(msg, m.keys.Bottom):
+		if n := len(m.history.versions); n > 0 {
+			m.history.cursor = n - 1
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.Confirm):
+		version, ok := m.history.selected()
+		if !ok {
+			return m, nil
+		}
+		return m, revealVersionCmd(m.deps, m.history.vault, m.history.key, version.Seq)
+	case msg.String() == "r":
+		if _, ok := m.history.selected(); !ok {
+			return m, nil
+		}
+		m.history.confirming = true
+		return m, nil
+	}
+	return m, nil
 }

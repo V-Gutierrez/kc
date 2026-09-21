@@ -66,6 +66,9 @@ kc run --vault prod -- <command>
 kc env
 kc env --vault prod
 
+# In the TUI: press h on a key to browse its versions
+#   j/k move | Enter copy a version | r restore (with confirmation) | Esc back
+
 # Recover a previous value — every kc set records the value it replaces
 kc history KEY_NAME                          # seq, timestamp, digest (never plaintext)
 kc get KEY_NAME --version 2
@@ -148,6 +151,7 @@ It is a no-op while the resolved vault is unchanged. On a change it unsets the p
 | `kc set KEY` | Storing new secrets interactively |
 | `kc resolve` | Batch resolution via stdin JSON (Consi/OpenClaw protocol) |
 | `kc history` / `kc rollback` | A secret was overwritten and you need the previous value |
+| `h` in the TUI | Same, without leaving the interface |
 | `kc vault use` | A project should always act on its own vault |
 | `kc vault clone` | Spinning up a staging copy of a vault |
 

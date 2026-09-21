@@ -53,10 +53,29 @@ type Clipboard interface {
 	Copy(value string) error
 }
 
+// Version is one recorded previous value of a secret. The value never travels
+// with it — only a digest, so a listing can be rendered without holding
+// plaintext anywhere near the screen.
+type Version struct {
+	Seq       int
+	Recorded  string
+	Protected bool
+	Digest    string
+}
+
+// History exposes the versions kc recorded before each overwrite. It is
+// optional: a Deps without it simply has no history view.
+type History interface {
+	Versions(vault, key string) ([]Version, error)
+	Value(vault, key string, seq int) (string, error)
+	Rollback(vault, key string, seq int) error
+}
+
 type Deps struct {
 	Store         Store
 	Vaults        Vaults
 	Clipboard     Clipboard
+	History       History
 	InitialFilter string
 }
 
@@ -96,6 +115,7 @@ const (
 	modeCreateVault
 	modeVaultPicker
 	modeCommandPalette
+	modeHistory
 )
 
 type previewState struct {
@@ -108,6 +128,24 @@ type previewState struct {
 type copyRecord struct {
 	Vault string
 	Key   string
+}
+
+// historyState is the version browser for one secret.
+type historyState struct {
+	vault      string
+	key        string
+	versions   []Version
+	cursor     int
+	loading    bool
+	confirming bool
+}
+
+// selected returns the version under the cursor.
+func (h historyState) selected() (Version, bool) {
+	if h.cursor < 0 || h.cursor >= len(h.versions) {
+		return Version{}, false
+	}
+	return h.versions[h.cursor], true
 }
 
 type formState struct {
@@ -159,6 +197,24 @@ type deletedMsg struct {
 	entry entry
 }
 
+type historyLoadedMsg struct {
+	vault    string
+	key      string
+	versions []Version
+	err      error
+}
+
+type historyValueMsg struct {
+	seq   int
+	value string
+}
+
+type rolledBackMsg struct {
+	vault string
+	key   string
+	seq   int
+}
+
 type hideMsg struct {
 	entry entry
 	token int
@@ -204,6 +260,7 @@ type Model struct {
 	preview          previewState
 	form             formState
 	formError        string
+	history          historyState
 	loading          bool
 	status           string
 	flashMessage     string

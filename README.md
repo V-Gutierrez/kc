@@ -338,6 +338,8 @@ clean rather than holding secrets the new directory is not entitled to.
 
 ## Secret versioning
 
+Available both in the TUI (press `h` on any key) and on the command line.
+
 `kc set` records the value it replaces, so an overwrite is no longer final:
 
 ```bash
@@ -362,6 +364,27 @@ kc set API_KEY "$v" --keep-versions 20     # override for one write
 
 `kc audit` flags credentials that have not been rotated inside the configured
 window.
+
+### In the TUI
+
+Press `h` on a selected key to browse its versions without leaving the
+interface:
+
+```
+History · STRIPE_TOKEN
+vault:prod
+
+VER  RECORDED          PROTECTION   DIGEST
+▸ 2    2026-09-21 20:27  protected    fb04dcb6970e
+  1    2026-09-19 09:30  protected    3bfc269594ef
+
+j/k: move | Enter: copy version | r: restore | Esc: back
+```
+
+Values are never rendered — the list shows digests, and `Enter` copies the real
+value to the clipboard exactly like reading a live secret. `r` restores the
+selected version after a confirmation, and the value it replaces is recorded
+too, so the restore is itself reversible.
 
 ## Secure Secret Injection
 
